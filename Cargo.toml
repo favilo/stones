@@ -1,0 +1,19 @@
+[package]
+name = "stones"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.dev]
+opt-level = 1
+
+# Enable high optimizations for dependencies (incl. Bevy), but not for our code:
+[profile.dev.package."*"]
+opt-level = 3
+
+[dependencies]
+bevy = { version = "0.12.1", features = [] }
+bevy_rapier3d = { version = "0.24.0", features = ["debug-render", "parallel", "serde", "simd-stable"] }
+# bevy_xpbd_3d = { version = "0.3.3", features = ["debug-plugin"] }
