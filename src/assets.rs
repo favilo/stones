@@ -1,13 +1,14 @@
 use bevy::{
+    app,
     asset::{io::Reader, AssetLoader, AsyncReadExt, LoadContext},
     prelude::*,
     utils::BoxedFuture,
 };
 use bevy_rapier3d::geometry::Collider;
 
-pub(crate) struct AssetPlugin;
+pub(crate) struct Plugin;
 
-impl Plugin for AssetPlugin {
+impl app::Plugin for Plugin {
     fn build(&self, app: &mut App) {
         app.init_asset_loader::<ColliderLoader>()
             .init_asset::<ColliderWrapper>();
