@@ -16,6 +16,7 @@ impl app::Plugin for Plugin {
 }
 
 #[derive(Debug, Asset, TypePath)]
+#[allow(dead_code)]
 pub(crate) struct ColliderWrapper(pub Collider);
 
 #[derive(Debug, Default)]

@@ -3,11 +3,13 @@ use std::f32::consts::{FRAC_PI_2, PI};
 use bevy::{pbr::CascadeShadowConfigBuilder, prelude::*};
 
 pub(crate) fn setup_graphics(mut commands: Commands) {
-    commands.spawn((Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.55, 0.55)
-            .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
-        ..default()
-    },));
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(0.0, 0.55, 0.55)
+                .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+            ..default()
+        },
+    ));
 
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {

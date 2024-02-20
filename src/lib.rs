@@ -6,14 +6,14 @@ use bevy::{
     prelude::*,
 };
 use bevy_asset_loader::{asset_collection::AssetCollection, loading_state::LoadingStateSet};
+use bevy_mod_picking::{debug::DebugPickingPlugin, DefaultPickingPlugins};
 use bevy_rapier3d::prelude::*;
 use game::GameState;
 use iyes_progress::{ProgressCounter, ProgressPlugin};
 use tracing::Level;
 
-use crate::assets::ColliderWrapper;
-
 mod assets;
+mod events;
 mod game;
 mod graphics;
 
@@ -21,7 +21,11 @@ mod graphics;
 struct GameAssets {
     #[asset(path = "scenes/low_poly.glb#Scene0")]
     board: Handle<Scene>,
-
+    // TODO: Think about adding this back
+    //
+    // #[asset(path = "scenes/low_poly.glb#Mesh0/Primitive0")]
+    // low_poly_mesh: Handle<Mesh>,
+    //
     // #[asset(path = "colliders/Board.msp")]
     // board_collider: Handle<ColliderWrapper>,
 }
@@ -46,14 +50,21 @@ impl Plugin for GamePlugin {
             FrameTimeDiagnosticsPlugin,
             bevy_inspector_egui::quick::WorldInspectorPlugin::new(),
             ProgressPlugin::new(GameState::Loading).continue_to(GameState::Loaded),
+            DefaultPickingPlugins
+                .build()
+                // .disable::<RaycastBackend>()
+                .disable::<DebugPickingPlugin>(),
         ))
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(RapierDebugRenderPlugin::default())
+        // .insert_resource(RapierBackendSettings {
+        //     require_markers: true,
+        // })
         .insert_resource(DebugRenderContext {
             enabled: false,
             ..Default::default()
         })
-        .add_plugins((assets::Plugin, game::Plugin))
+        .add_plugins((assets::Plugin, events::Plugin, game::Plugin))
         .add_systems(
             Update,
             (print_progress,)

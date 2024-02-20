@@ -2,15 +2,23 @@ use bevy::{app, prelude::*};
 use bevy_asset_loader::loading_state::{
     config::ConfigureLoadingState, LoadingState, LoadingStateAppExt,
 };
+use bevy_mod_picking::{
+    events::{Click, Out, Over, Pointer},
+    prelude::{Listener, On},
+    PickableBundle,
+};
 use bevy_rapier3d::prelude::*;
+use tracing::instrument;
 
-use crate::{assets::ColliderWrapper, graphics::setup_graphics, GameAssets};
+use crate::{events::MoveEvent, graphics::setup_graphics, GameAssets};
 
 pub struct Plugin;
 
 impl app::Plugin for Plugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app.insert_resource(Board::default())
+            .register_type::<Player>()
+            .register_type::<Hole>()
             .add_state::<GameState>()
             .add_loading_state(
                 LoadingState::new(GameState::Loading)
@@ -20,7 +28,8 @@ impl app::Plugin for Plugin {
             .add_systems(
                 OnEnter(GameState::Loaded),
                 (setup_graphics, setup_board, setup_pieces),
-            );
+            )
+            .add_systems(Update, perform_move.run_if(in_state(GameState::Loaded)));
     }
 }
 
@@ -34,6 +43,8 @@ pub enum GameState {
 #[derive(Debug, Default)]
 pub struct Side {
     buckets: [Vec<Entity>; 6],
+
+    #[allow(unused)]
     score: Vec<Entity>,
 }
 
@@ -46,35 +57,112 @@ impl Board {
     const HOLE_DROP_POSITIONS: [[Vec3; 6]; 2] = [
         // Top Row
         [
-            Vec3::new(-0.2, 0.135, -0.035),
-            Vec3::new(-0.12, 0.135, -0.035),
-            Vec3::new(-0.035, 0.135, -0.035),
-            Vec3::new(0.035, 0.135, -0.035),
-            Vec3::new(0.12, 0.135, -0.035),
-            Vec3::new(0.2, 0.135, -0.035),
+            Vec3::new(-0.215, 0.135, -0.035),
+            Vec3::new(-0.130, 0.135, -0.035),
+            Vec3::new(-0.040, 0.135, -0.035),
+            Vec3::new(00.042, 0.135, -0.035),
+            Vec3::new(00.130, 0.135, -0.035),
+            Vec3::new(00.215, 0.135, -0.035),
         ],
         // Bottom Row
         [
-            Vec3::new(-0.2, 0.135, 0.035),
-            Vec3::new(-0.12, 0.135, 0.035),
-            Vec3::new(-0.035, 0.135, 0.035),
-            Vec3::new(0.035, 0.135, 0.035),
-            Vec3::new(0.12, 0.135, 0.035),
-            Vec3::new(0.2, 0.135, 0.035),
+            Vec3::new(00.215, 0.135, 0.035),
+            Vec3::new(00.130, 0.135, 0.035),
+            Vec3::new(00.042, 0.135, 0.035),
+            Vec3::new(-0.040, 0.135, 0.035),
+            Vec3::new(-0.130, 0.135, 0.035),
+            Vec3::new(-0.215, 0.135, 0.035),
         ],
     ];
+    const BUCKET_POSITIONS: [Vec3; 2] =
+        [Vec3::new(0.275, 0.135, 0.0), Vec3::new(-0.275, 0.135, 0.0)];
 
-    pub const fn bucket_position(player: usize, hole: usize) -> Vec3 {
-        assert!(player < 2, "Invalid player index");
-        assert!(hole < 6, "Invalid hole index");
-        Self::HOLE_DROP_POSITIONS[player][hole]
+    pub fn bucket_position(index: Index) -> Vec3 {
+        match index {
+            Index::Player(Player(p), Hole(h)) => {
+                assert!(p < 2, "Invalid player index");
+                assert!(h < 6, "Invalid hole index");
+                Self::HOLE_DROP_POSITIONS[p][h]
+            }
+            Index::Score(Player(p)) => {
+                assert!(p < 2, "Invalid player index");
+                Self::BUCKET_POSITIONS[p]
+            }
+        }
+    }
+
+    pub fn get_bucket_mut(&mut self, index: Index) -> &mut Vec<Entity> {
+        match index {
+            Index::Player(Player(p), Hole(h)) => {
+                tracing::info!("Getting hole for player {:?} hole {:?}", p, h);
+                &mut self.players[p].buckets[h]
+            }
+            Index::Score(Player(p)) => {
+                tracing::info!("Getting score bucket for player {:?}", p);
+                &mut self.players[p].score
+            }
+        }
+    }
+
+    pub fn perform_move(
+        &mut self,
+        player: usize,
+        hole: usize,
+        query: &mut Query<(&mut Transform, &mut Sleeping, &mut Ccd)>,
+    ) {
+        let entities = self.players[player].buckets[hole]
+            .drain(..)
+            .collect::<Vec<_>>();
+        let start_player = player;
+        let mut index = Index::Player(Player(start_player), Hole(hole));
+        for ball in entities.into_iter() {
+            index = index.next(Player(start_player));
+
+            tracing::info!("Moving ball to {:?}", index);
+            self.get_bucket_mut(index).push(ball);
+            let (mut transform, mut sleeping, mut ccd) = query.get_mut(ball).unwrap();
+            transform.translation = Self::bucket_position(index);
+            sleeping.sleeping = false;
+            ccd.enabled = true;
+        }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Index {
+    Player(Player, Hole),
+    Score(Player),
+}
+
+impl Index {
+    fn next(self, Player(start): Player) -> Self {
+        match self {
+            Index::Player(Player(p), Hole(h)) => {
+                if h >= 5 {
+                    if p == start {
+                        Index::Score(Player(p))
+                    } else {
+                        Index::Player(Player((p + 1) % 2), Hole(0))
+                    }
+                } else {
+                    Index::Player(Player(p), Hole(h + 1))
+                }
+            }
+            Index::Score(Player(p)) => Index::Player(Player((p + 1) % 2), Hole(0)),
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
+pub struct Player(pub usize);
+
+#[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
+pub struct Hole(pub usize);
+
 pub fn setup_board(
     mut commands: Commands,
-    colliders: Res<Assets<ColliderWrapper>>,
     game_assets: Res<GameAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let mut board_entity = commands.spawn((
         RigidBody::Fixed,
@@ -90,28 +178,72 @@ pub fn setup_board(
         },
     ));
 
-    // if let Some(collider) = colliders.get(&game_assets.board_collider) {
-    if let Some(collider) = None::<&ColliderWrapper> {
-        tracing::info!("Inserting loaded collider");
-        board_entity.insert(collider.0.clone());
-    } else {
-        tracing::info!("Inserting async computed collider");
-        board_entity.insert(AsyncSceneCollider {
-            shape: Some(ComputedColliderShape::TriMesh),
-            // shape: Some(ComputedColliderShape::ConvexDecomposition(
-            //     VHACDParameters {
-            //         resolution: 512 + 128,
-            //         concavity: 0.000000001,
-            //         max_convex_hulls: 2048,
-            //         convex_hull_approximation: false,
-            //         fill_mode: FillMode::SurfaceOnly,
-            //         alpha: 0.05,
-            //         beta: 0.05,
-            //         ..Default::default()
-            //     },
-            // )),
-            named_shapes: Default::default(),
-        });
+    tracing::info!("Inserting async computed collider");
+    board_entity.insert(AsyncSceneCollider {
+        shape: Some(ComputedColliderShape::TriMesh),
+        named_shapes: Default::default(),
+    });
+    let mesh = meshes.add(
+        Mesh::try_from(shape::Icosphere {
+            radius: 0.03,
+            subdivisions: 3,
+        })
+        .unwrap(),
+    );
+
+    for player in 0..2 {
+        for hole in 0..6 {
+            // Invisible material for hole
+            let mut bucket_position =
+                Board::bucket_position(Index::Player(Player(player), Hole(hole)));
+            bucket_position.y = 0.01;
+            commands.spawn((
+                Player(player),
+                Hole(hole),
+                PointLightBundle {
+                    point_light: PointLight {
+                        intensity: 0.0,
+                        range: 0.5,
+                        radius: 0.5,
+                        color: Color::rgba(1.0, 1.0, 0.0, 1.0),
+                        ..Default::default()
+                    },
+                    transform: Transform::from_translation(bucket_position),
+                    ..Default::default()
+                },
+                mesh.clone(),
+                Collider::ball(0.03),
+                Sensor,
+                PickableBundle::default(),
+                On::<Pointer<Over>>::target_component_mut(|_, light: &mut PointLight| {
+                    light.intensity = 1.0;
+                }),
+                On::<Pointer<Out>>::target_component_mut(|_, light: &mut PointLight| {
+                    light.intensity = 0.0;
+                }),
+                On::<Pointer<Click>>::run(
+                    move |_event: Listener<Pointer<Click>>,
+                          mut move_events: EventWriter<MoveEvent>| {
+                        move_events.send(MoveEvent::HoleClicked(player, hole));
+                    },
+                ),
+            ));
+        }
+    }
+}
+
+pub fn perform_move(
+    mut move_events: EventReader<MoveEvent>,
+    mut board: ResMut<Board>,
+    mut transforms: Query<(&mut Transform, &mut Sleeping, &mut Ccd)>,
+) {
+    for event in move_events.read() {
+        match *event {
+            MoveEvent::HoleClicked(player, hole) => {
+                tracing::info!("Player {:?} moved hole {:?}", player, hole);
+                board.perform_move(player, hole, &mut transforms);
+            }
+        }
     }
 }
 
@@ -135,7 +267,7 @@ pub fn setup_pieces(
     for player in 0..2 {
         for hole in 0..6 {
             for i in 0..4 {
-                let position = Board::bucket_position(player, hole);
+                let position = Board::bucket_position(Index::Player(Player(player), Hole(hole)));
                 let perturb = Vec3::new(
                     (i as f32 * 0.001).sin() * 0.0025,
                     i as f32 * 0.05,
@@ -164,6 +296,10 @@ pub fn setup_pieces(
                                 ..default()
                             },
                             Ccd::enabled(),
+                            Sleeping {
+                                sleeping: false,
+                                ..Default::default()
+                            },
                         ))
                         .id(),
                 );

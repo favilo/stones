@@ -16,15 +16,21 @@ path = "src/bin.rs"
 
 [profile.dev]
 opt-level = 1
+debug = true
 
 # Enable high optimizations for dependencies (incl. Bevy), but not for our code:
 [profile.dev.package."*"]
 opt-level = 3
+debug = true
+
+[profile.release]
+debug = true
 
 [dependencies]
 bevy = { version = "0.12.0", features = [] }
 bevy-inspector-egui = "0.22.1"
 bevy_asset_loader = { version = "0.19.1", features = ["3d", "progress_tracking"] }
+bevy_mod_picking = { version = "0.17.0", features = [] }
 bevy_rapier3d = { version = "0.24.0", features = ["debug-render", "parallel", "serde-serialize", "simd-stable", "async-collider"] }
 iyes_progress = { version = "0.10.0", features = ["bevy_asset", "bevy_log"] }
 rmp-serde = "1.1.2"
