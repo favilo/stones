@@ -1,0 +1,17 @@
+android:
+  gradle: true
+  # icon: "your_icon.png"
+  assets:
+    - ../assets/scenes
+    - ../assets/colliders
+    - ../assets/dynamic.assets.ron
+    # - "../assets/scenes/**/*.png"
+  manifest:
+    package: "org.favil.stones"
+    version_code: 3
+    application:
+      label: "Mancala: African Stones"
+      activities:
+        - orientation: landscape
+    uses_permission:
+      - name: "android.permission.READ_EXTERNAL_STORAGE"

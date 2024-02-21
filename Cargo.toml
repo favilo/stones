@@ -2,9 +2,15 @@
 name = "stones"
 version = "0.1.0"
 edition = "2021"
+publish = false
 resolver = "2"
+authors = ["Favil Orbedios <favilo@gmail.com>"]
+
+[workspace]
+members = ["mobile"]
 
 [lib]
+# crate-type = ["rlib", "cdylib"]
 name = "stones"
 path = "src/lib.rs"
 
@@ -12,9 +18,8 @@ path = "src/lib.rs"
 name = "mancala"
 path = "src/bin.rs"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [profile.dev]
+lto = false
 opt-level = 1
 debug = true
 
@@ -24,19 +29,43 @@ opt-level = 3
 debug = true
 
 [profile.release]
+lto = false
 debug = true
 
+# [profile.release]
+# opt-level = "s"
+# lto = true
+# codegen-units = 1
+# strip = true
+
+# # Profile for distribution
+# [profile.dist]
+# inherits = "release"
+# opt-level = 3
+# lto = true
+# codegen-units = 1
+# strip = true
+
+
 [dependencies]
-bevy = { version = "0.12.0", features = [] }
-bevy-inspector-egui = "0.22.1"
-bevy_asset_loader = { version = "0.19.1", features = ["3d", "progress_tracking"] }
+bevy = { version = "0.13.0", features = [] }
+bevy_asset_loader = { version = "0.20.0", features = ["3d", "progress_tracking", "standard_dynamic_assets"] }
 bevy_mod_picking = { version = "0.17.0", features = [] }
-bevy_rapier3d = { version = "0.24.0", features = ["debug-render", "parallel", "serde-serialize", "simd-stable", "async-collider"] }
-iyes_progress = { version = "0.10.0", features = ["bevy_asset", "bevy_log"] }
+bevy_obj = "0.13"
+bevy_rapier3d = { version = "0.25.0", features = ["debug-render", "parallel", "serde-serialize", "simd-stable", "async-collider"] }
+iyes_progress = { version = "0.11.0", features = ["bevy_asset", "bevy_log"] }
 rmp-serde = "1.1.2"
 serde = "1.0.196"
 serde_json = "1.0.113"
 thiserror = "1.0.57"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["tracing-log", "env-filter"] }
-# bevy_xpbd_3d = { version = "0.3.3", features = ["debug-plugin"] }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+bevy-inspector-egui = { git = "https://github.com/Aztro-dev/bevy-inspector-egui.git", branch = "main", version = "0.23.0" }
+# bevy-inspector-egui = { version = "0.22.1" }
+
+
+
+[patch.crates-io]
+bevy_mod_picking = { git = "https://github.com/StrikeForceZero/bevy_mod_picking.git", branch = "bevy-0.13" }

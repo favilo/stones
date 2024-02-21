@@ -4,9 +4,11 @@ use bevy::{
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     log::LogPlugin,
     prelude::*,
+    utils::HashMap,
 };
 use bevy_asset_loader::{asset_collection::AssetCollection, loading_state::LoadingStateSet};
 use bevy_mod_picking::{debug::DebugPickingPlugin, DefaultPickingPlugins};
+use bevy_obj::ObjPlugin;
 use bevy_rapier3d::prelude::*;
 use game::GameState;
 use iyes_progress::{ProgressCounter, ProgressPlugin};
@@ -19,22 +21,68 @@ mod graphics;
 
 #[derive(AssetCollection, Resource)]
 struct GameAssets {
-    #[asset(path = "scenes/low_poly.glb#Scene0")]
-    board: Handle<Scene>,
-    // TODO: Think about adding this back
-    //
-    // #[asset(path = "scenes/low_poly.glb#Mesh0/Primitive0")]
-    // low_poly_mesh: Handle<Mesh>,
-    //
-    // #[asset(path = "colliders/Board.msp")]
-    // board_collider: Handle<ColliderWrapper>,
+    #[asset(key = "board_mesh")]
+    board_mesh: Handle<Mesh>,
+
+    #[asset(key = "board_textures", collection(typed, mapped))]
+    #[asset(image(sampler = nearest))]
+    board_textures: HashMap<String, Handle<Image>>,
+
+    #[asset(key = "piece_mesh")]
+    piece_mesh: Handle<Mesh>,
+
+    #[asset(key = "piece_collider")]
+    piece_collider: Handle<Mesh>,
+
+    #[asset(key = "green_textures", collection(typed, mapped))]
+    #[asset(image(sampler = nearest))]
+    green_textures: HashMap<String, Handle<Image>>,
+
+    #[asset(key = "blue_textures", collection(typed, mapped))]
+    #[asset(image(sampler = nearest))]
+    blue_textures: HashMap<String, Handle<Image>>,
+
+    #[asset(key = "red_textures", collection(typed, mapped))]
+    #[asset(image(sampler = nearest))]
+    red_textures: HashMap<String, Handle<Image>>,
 }
 
-struct GamePlugin;
+pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            FrameTimeDiagnosticsPlugin,
+            ProgressPlugin::new(GameState::Loading).continue_to(GameState::Loaded),
+            DefaultPickingPlugins
+                .build()
+                .disable::<DebugPickingPlugin>(),
+            ObjPlugin,
+        ));
+        #[cfg(not(target_os = "android"))]
+        {
+            app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
+        }
+        app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+            .add_plugins(RapierDebugRenderPlugin::default())
+            .insert_resource(DebugRenderContext {
+                enabled: false,
+                ..Default::default()
+            })
+            .add_plugins((assets::Plugin, events::Plugin, game::Plugin))
+            .add_systems(
+                Update,
+                (print_progress,)
+                    .run_if(in_state(GameState::Loading))
+                    .after(LoadingStateSet(GameState::Loading)),
+            )
+            .add_systems(Update, (save_collider_to_file, toggle_debug));
+    }
+}
+
+pub fn run() {
+    App::new()
+        .add_plugins(
             DefaultPlugins
                 .set(LogPlugin {
                     level: Level::INFO,
@@ -47,40 +95,13 @@ impl Plugin for GamePlugin {
                     }),
                     ..Default::default()
                 }),
-            FrameTimeDiagnosticsPlugin,
-            bevy_inspector_egui::quick::WorldInspectorPlugin::new(),
-            ProgressPlugin::new(GameState::Loading).continue_to(GameState::Loaded),
-            DefaultPickingPlugins
-                .build()
-                // .disable::<RaycastBackend>()
-                .disable::<DebugPickingPlugin>(),
-        ))
-        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugins(RapierDebugRenderPlugin::default())
-        // .insert_resource(RapierBackendSettings {
-        //     require_markers: true,
-        // })
-        .insert_resource(DebugRenderContext {
-            enabled: false,
-            ..Default::default()
-        })
-        .add_plugins((assets::Plugin, events::Plugin, game::Plugin))
-        .add_systems(
-            Update,
-            (print_progress,)
-                .run_if(in_state(GameState::Loading))
-                .after(LoadingStateSet(GameState::Loading)),
         )
-        .add_systems(Update, (save_collider_to_file, toggle_debug));
-    }
+        .add_plugins(GamePlugin)
+        .run();
 }
 
-pub fn run() {
-    App::new().add_plugins(GamePlugin).run();
-}
-
-fn save_collider_to_file(keys: Res<Input<KeyCode>>, colliders: Query<(&Name, &Collider)>) {
-    if !keys.just_pressed(KeyCode::S) {
+fn save_collider_to_file(keys: Res<ButtonInput<KeyCode>>, colliders: Query<(&Name, &Collider)>) {
+    if !keys.just_pressed(KeyCode::KeyS) {
         return;
     }
 
@@ -96,8 +117,8 @@ fn save_collider_to_file(keys: Res<Input<KeyCode>>, colliders: Query<(&Name, &Co
     }
 }
 
-fn toggle_debug(keys: Res<Input<KeyCode>>, mut debug_context: ResMut<DebugRenderContext>) {
-    if !keys.just_pressed(KeyCode::D) {
+fn toggle_debug(keys: Res<ButtonInput<KeyCode>>, mut debug_context: ResMut<DebugRenderContext>) {
+    if !keys.just_pressed(KeyCode::KeyD) {
         return;
     }
     debug_context.enabled = !debug_context.enabled;
@@ -114,7 +135,7 @@ fn print_progress(
             info!(
                 "[Frame {}] Changed progress: {:?}",
                 diagnostics
-                    .get(FrameTimeDiagnosticsPlugin::FRAME_COUNT)
+                    .get(&FrameTimeDiagnosticsPlugin::FRAME_COUNT)
                     .map(|diagnostic| diagnostic.value().unwrap_or(0.))
                     .unwrap_or(0.),
                 progress

@@ -1,0 +1,55 @@
+({
+    "board_mesh": File (
+        path: "scenes/mancala_board/display.obj",
+    ),
+    "board_textures": Files (
+        paths: [
+            "scenes/mancala_board/textures/mancala_board_hi_standardSurface1_BaseColor.png",
+            "scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Emissive.png",
+            "scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Height.png",
+            "scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Metallic.png",
+            "scenes/mancala_board/textures/mancala_board_hi_standardSurface1_MetallicRoughness.png",
+            "scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Normal.png",
+            "scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Roughness.png",
+        ],
+    ),
+    "piece_mesh": File (
+        path: "scenes/mancala_stone/display.obj",
+    ),
+    "piece_collider": File (
+        path: "scenes/mancala_stone/physics.obj",
+    ),
+    "green_textures": Files (
+        paths: [
+            "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_BaseColor.png",
+            "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_Emissive.png",
+            "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_Height.png",
+            "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_Metallic.png",
+            "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_MetallicRoughness.png",
+            "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_Normal.png",
+            "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_Roughness.png",
+        ],
+    ),
+    "blue_textures": Files (
+        paths: [
+            "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_BaseColor.png",
+            "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_Emissive.png",
+            "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_Height.png",
+            "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_Metallic.png",
+            "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_MetallicRoughness.png",
+            "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_Normal.png",
+            "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_Roughness.png",
+        ],
+    ),
+    "red_textures": Files (
+        paths: [
+            "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_BaseColor.png",
+            "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_Emissive.png",
+            "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_Height.png",
+            "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_Metallic.png",
+            "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_MetallicRoughness.png",
+            "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_Normal.png",
+            "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_Roughness.png",
+        ],
+    ),
+})

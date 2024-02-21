@@ -1,0 +1,30 @@
+[package]
+name = "mobile"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "mobile"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+stones = { path = ".."}
+bevy = { version = "0.13.0", default-features = false }
+
+[package.metadata.android]
+package = "org.favil.stones"
+apk_name = "stones"
+assets = "../assets"
+strip = "default"
+# build_targets = ["aarch64-linux-android", "armv7-linux-androideabi"]
+build_targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
+target_sdk_version = 31
+
+[package.metadata.android.application]
+# icon = "@mipmap/ic_launcher"
+label = "Mancala: African Stones"
+debuggable = true
+
