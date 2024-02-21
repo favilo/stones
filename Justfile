@@ -1,4 +1,4 @@
-defualt: run
+default: run
 
 build-play:
     @echo "Building..."
