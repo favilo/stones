@@ -1,10 +1,14 @@
 use std::f32::consts::{FRAC_PI_2, PI};
 
-use bevy::{pbr::CascadeShadowConfigBuilder, prelude::*};
+use bevy::prelude::*;
 
-pub(crate) fn setup_graphics(mut commands: Commands) {
+pub(crate) fn setup_graphics(mut commands: Commands, cameras: Query<Entity, With<Camera>>) {
+    if cameras.iter().count() > 0 {
+        return;
+    }
+
     commands.spawn((Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.55, 0.55)
+        transform: Transform::from_xyz(0.0, 0.45, 0.45)
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         ..default()
     },));
@@ -14,16 +18,6 @@ pub(crate) fn setup_graphics(mut commands: Commands) {
             shadows_enabled: true,
             ..default()
         },
-        // This is a relatively small scene, so use tighter shadow
-        // cascade bounds than the default for better quality.
-        // We also adjusted the shadow map to be larger since we're
-        // only using a single cascade.
-        cascade_shadow_config: CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            maximum_distance: 2.6,
-            ..default()
-        }
-        .into(),
         transform: Transform::from_rotation(Quat::from_euler(
             EulerRot::ZYX,
             0.0,

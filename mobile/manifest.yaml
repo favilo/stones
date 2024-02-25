@@ -8,9 +8,10 @@ android:
     # - "../assets/scenes/**/*.png"
   manifest:
     package: "org.favil.stones"
-    version_code: 3
+    version_code: 6
     application:
       label: "Mancala: African Stones"
+      theme: "@android:style/Theme.NoTitleBar.Fullscreen"
       activities:
         - orientation: landscape
     uses_permission:

@@ -7,6 +7,7 @@ use bevy::{
     utils::HashMap,
 };
 use bevy_asset_loader::{asset_collection::AssetCollection, loading_state::LoadingStateSet};
+use bevy_mod_billboard::plugin::BillboardPlugin;
 use bevy_mod_picking::{debug::DebugPickingPlugin, DefaultPickingPlugins};
 use bevy_obj::ObjPlugin;
 use bevy_rapier3d::prelude::*;
@@ -18,6 +19,7 @@ mod assets;
 mod events;
 mod game;
 mod graphics;
+mod ui;
 
 #[derive(AssetCollection, Resource)]
 struct GameAssets {
@@ -53,23 +55,24 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             FrameTimeDiagnosticsPlugin,
-            ProgressPlugin::new(GameState::Loading).continue_to(GameState::Loaded),
+            ProgressPlugin::new(GameState::Loading).continue_to(GameState::Menu),
             DefaultPickingPlugins
                 .build()
                 .disable::<DebugPickingPlugin>(),
             ObjPlugin,
+            BillboardPlugin,
         ));
-        #[cfg(not(target_os = "android"))]
-        {
-            app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
-        }
+        // #[cfg(not(target_os = "android"))]
+        // {
+        //     app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
+        // }
         app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
             .add_plugins(RapierDebugRenderPlugin::default())
             .insert_resource(DebugRenderContext {
                 enabled: false,
                 ..Default::default()
             })
-            .add_plugins((assets::Plugin, events::Plugin, game::Plugin))
+            .add_plugins((assets::Plugin, events::Plugin, game::Plugin, ui::Plugin))
             .add_systems(
                 Update,
                 (print_progress,)
@@ -142,4 +145,10 @@ fn print_progress(
             );
         }
     }
+}
+
+pub fn cleanup<T: Component>(mut commands: Commands, entities: Query<Entity, With<T>>) {
+    entities.iter().for_each(|entity| {
+        commands.entity(entity).despawn_recursive();
+    });
 }

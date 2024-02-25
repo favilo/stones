@@ -50,6 +50,7 @@ debug = true
 [dependencies]
 bevy = { version = "0.13.0", features = [] }
 bevy_asset_loader = { version = "0.20.0", features = ["3d", "progress_tracking", "standard_dynamic_assets"] }
+bevy_mod_billboard = { git = "https://github.com/kulkalkul/bevy_mod_billboard", branch = "main" }
 bevy_mod_picking = { version = "0.17.0", features = [] }
 bevy_obj = "0.13"
 bevy_rapier3d = { version = "0.25.0", features = ["debug-render", "parallel", "serde-serialize", "simd-stable", "async-collider"] }
