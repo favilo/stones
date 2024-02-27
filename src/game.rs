@@ -5,7 +5,7 @@ use bevy_asset_loader::{
 };
 use bevy_mod_billboard::BillboardTextBundle;
 use bevy_mod_picking::{
-    events::{Click, Down, Out, Over, Pointer, Up},
+    events::{Down, Out, Over, Pointer, Up},
     prelude::{Listener, On},
     PickableBundle,
 };
@@ -42,16 +42,18 @@ impl app::Plugin for Plugin {
             )
             .add_systems(
                 Update,
-                (perform_move, update_labels, winner_found)
+                (
+                    perform_move,
+                    update_labels,
+                    winner_found,
+                    update_menu_button,
+                    update_winner,
+                )
                     .chain()
                     .run_if(in_state(GameState::Playing)),
             )
             .add_systems(
-                Update,
-                (update_winner,).run_if(in_state(GameState::GameOver)),
-            )
-            .add_systems(
-                OnExit(GameState::GameOver),
+                OnExit(GameState::Playing),
                 (cleanup::<GameUi>, cleanup::<WinnerUi>),
             );
     }
@@ -65,11 +67,8 @@ pub enum GameState {
     #[default]
     Loading,
 
-    // TODO: Add a main menu state
-    #[allow(unused)]
     Menu,
     Playing,
-    GameOver,
 }
 
 #[derive(Debug, Default)]
@@ -244,24 +243,24 @@ pub fn setup_board(
     *board = Board::default();
     let material = materials.add(StandardMaterial {
         base_color_texture: Some(
-            game_assets.board_textures
-                ["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_BaseColor.png"]
-                .clone(),
-        ),
-        emissive_texture: Some(
-            game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Emissive.png"].clone(),
-        ),
-        metallic_roughness_texture: Some(
-            game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_MetallicRoughness.png"]
-                .clone(),
-        ),
-        // normal_map_texture: Some(
-        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Normal.png"].clone(),
-        // ),
-        // depth_map: Some(
-        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Height.png"].clone(),
-        // ),
-        ..Default::default()
+                                game_assets.board_textures
+                                ["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_BaseColor.png"]
+                                .clone(),
+                                ),
+                                emissive_texture: Some(
+                                    game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Emissive.png"].clone(),
+                                    ),
+                                    metallic_roughness_texture: Some(
+                                        game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_MetallicRoughness.png"]
+                                        .clone(),
+                                        ),
+                                        // normal_map_texture: Some(
+                                        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Normal.png"].clone(),
+                                        // ),
+                                        // depth_map: Some(
+                                        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Height.png"].clone(),
+                                        // ),
+                                        ..Default::default()
     });
     let mut mesh = meshes.get(game_assets.board_mesh.clone()).unwrap().clone();
     mesh.generate_tangents().unwrap();
@@ -273,7 +272,7 @@ pub fn setup_board(
         GravityScale(0.25),
         ColliderMassProperties::Mass(1000.0),
         Friction {
-            coefficient: 10000.0,
+            coefficient: 10.0,
             combine_rule: CoefficientCombineRule::Max,
         },
         Name::from("Board"),
@@ -339,20 +338,10 @@ pub fn setup_board(
                           turn: Res<PlayerTurn>,
                           board: Res<Board>,
                           game_state: Res<State<GameState>>| {
-                        if player != turn.0 {
+                        if is_invalid_selection(player, turn, game_state, board, hole) {
                             return;
                         }
 
-                        if *game_state != GameState::Playing {
-                            return;
-                        }
-
-                        if board
-                            .get_bucket(Index::Player(Player(player), Hole(hole)))
-                            .is_empty()
-                        {
-                            return;
-                        }
                         selected.0 = Some(Index::Player(Player(player), Hole(hole)));
                     },
                 ),
@@ -362,48 +351,22 @@ pub fn setup_board(
                           board: Res<Board>,
                           mut move_events: EventWriter<MoveEvent>,
                           game_state: Res<State<GameState>>| {
-                        if player != turn.0 {
+                        if is_invalid_selection(player, turn, game_state, board, hole) {
                             return;
                         }
 
-                        if *game_state != GameState::Playing {
+                        if selected.0.is_none() {
                             return;
                         }
-
-                        if board
-                            .get_bucket(Index::Player(Player(player), Hole(hole)))
-                            .is_empty()
-                        {
+                        if selected.0.unwrap() != Index::Player(Player(player), Hole(hole)) {
                             return;
                         }
                         move_events.send(MoveEvent::HoleClicked(player, hole));
                         selected.0 = None;
                     },
                 ),
-                // On::<Pointer<Click>>::run(
-                //     move |_event: Listener<Pointer<Click>>,
-                //           mut move_events: EventWriter<MoveEvent>,
-                //           turn: Res<PlayerTurn>,
-                //           board: Res<Board>,
-                //           game_state: Res<State<GameState>>| {
-                //         if player != turn.0 {
-                //             return;
-                //         }
-
-                //         if *game_state != GameState::Playing {
-                //             return;
-                //         }
-
-                //         if board
-                //             .get_bucket(Index::Player(Player(player), Hole(hole)))
-                //             .is_empty()
-                //         {
-                //             return;
-                //         }
-                //         move_events.send(MoveEvent::HoleClicked(player, hole));
-                //     },
-                // ),
             ));
+
             let offset = match player {
                 0 => Vec3::new(0.0, 0.0, -0.1),
                 _ => Vec3::new(0.0, 0.0, 0.1),
@@ -433,18 +396,49 @@ pub fn setup_board(
     }
 }
 
+fn is_invalid_selection(
+    player: usize,
+    turn: Res<'_, PlayerTurn>,
+    game_state: Res<'_, State<GameState>>,
+    board: Res<'_, Board>,
+    hole: usize,
+) -> bool {
+    player != turn.0
+        || *game_state != GameState::Playing
+        || board
+            .get_bucket(Index::Player(Player(player), Hole(hole)))
+            .is_empty()
+}
+
 pub fn winner_found(
     mut winner: EventReader<Winner>,
     mut lights: Query<&mut PointLight>,
-    commands: Commands,
-    mut state: ResMut<NextState<GameState>>,
+    mut commands: Commands,
 ) {
     if let Some(Winner(winner)) = winner.read().next() {
         for mut light in lights.iter_mut() {
             light.intensity = 0.0;
         }
-        spawn_win_text(*winner, commands);
-        state.set(GameState::GameOver);
+        spawn_win_text(*winner, &mut commands);
+    }
+}
+
+fn update_menu_button(
+    mut state: ResMut<NextState<GameState>>,
+    interactions: Query<(&Interaction, &Children), (With<MainMenuButton>, Changed<Interaction>)>,
+    mut text_query: Query<&mut Text>,
+) {
+    for (interaction, children) in interactions.iter() {
+        let mut text = text_query.get_mut(children[0]).unwrap();
+        match interaction {
+            Interaction::Pressed => state.set(GameState::Menu),
+            Interaction::Hovered => {
+                text.sections[0].style.color = Color::WHITE;
+            }
+            Interaction::None => {
+                text.sections[0].style.color = Color::GRAY;
+            }
+        }
     }
 }
 
@@ -679,7 +673,7 @@ fn setup_ui(mut commands: Commands) {
                     text: Text::from_section(
                         "0",
                         TextStyle {
-                            font_size: 50.0,
+                            font_size: 40.0,
                             color: Color::GREEN,
                             ..Default::default()
                         },
@@ -699,7 +693,7 @@ fn setup_ui(mut commands: Commands) {
                     text: Text::from_section(
                         "*",
                         TextStyle {
-                            font_size: 50.0,
+                            font_size: 40.0,
                             color: Color::GREEN,
                             ..Default::default()
                         },
@@ -737,7 +731,7 @@ fn setup_ui(mut commands: Commands) {
                     text: Text::from_section(
                         "*",
                         TextStyle {
-                            font_size: 50.0,
+                            font_size: 40.0,
                             color: Color::CYAN,
                             ..Default::default()
                         },
@@ -758,7 +752,7 @@ fn setup_ui(mut commands: Commands) {
                     text: Text::from_section(
                         "0",
                         TextStyle {
-                            font_size: 50.0,
+                            font_size: 40.0,
                             color: Color::CYAN,
                             ..Default::default()
                         },
@@ -771,16 +765,44 @@ fn setup_ui(mut commands: Commands) {
                     ..Default::default()
                 },
             ));
+            parent
+                .spawn((
+                    MainMenuButton,
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Px(60.0),
+                            ..Default::default()
+                        },
+                        background_color: BackgroundColor(Color::NONE),
+                        ..Default::default()
+                    },
+                ))
+                .with_children(|parent| {
+                    parent.spawn((TextBundle {
+                        text: Text::from_section(
+                            "Main Menu".to_string(),
+                            TextStyle {
+                                font_size: 20.0,
+                                color: Color::GRAY,
+                                ..Default::default()
+                            },
+                        ),
+                        ..Default::default()
+                    },));
+                });
         });
 }
 
-#[derive(Debug, Clone, Copy, Component)]
+#[derive(Debug, Default, Clone, Copy, Component)]
 pub struct WinnerUi;
 
 #[derive(Debug, Default, Clone, Copy, Component)]
 struct WinnerButton;
 
-fn spawn_win_text(winner: usize, mut commands: Commands) {
+#[derive(Debug, Default, Clone, Copy, Component)]
+struct MainMenuButton;
+
+fn spawn_win_text(winner: usize, commands: &mut Commands) {
     assert!(winner < 2, "Invalid winner index");
 
     const WIN_COLOR: [&str; 2] = ["Blue", "Green"];
