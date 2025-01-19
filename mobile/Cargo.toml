@@ -9,8 +9,8 @@ name = "mobile"
 crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
-stones = { path = ".."}
-bevy = { version = "0.13.0", default-features = false }
+stones = { path = ".." }
+bevy = { version = "0.15.1", default-features = false }
 
 [package.metadata.android]
 package = "org.favil.stones"
@@ -27,4 +27,3 @@ target_sdk_version = 31
 # icon = "@mipmap/ic_launcher"
 label = "Mancala: African Stones"
 debuggable = true
-

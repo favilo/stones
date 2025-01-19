@@ -1,15 +1,15 @@
-use bevy::{app, prelude::*, ui::FocusPolicy};
+use avian3d::{math::Vector, prelude::*};
+use bevy::{
+    app,
+    color::palettes::css::{GREEN, LIGHT_CYAN, SLATE_GRAY},
+    ecs::query::QueryData,
+    prelude::*,
+    ui::FocusPolicy,
+};
 use bevy_asset_loader::{
     loading_state::{config::ConfigureLoadingState, LoadingState, LoadingStateAppExt},
     standard_dynamic_asset::StandardDynamicAssetCollection,
 };
-use bevy_mod_billboard::BillboardTextBundle;
-use bevy_mod_picking::{
-    events::{Down, Out, Over, Pointer, Up},
-    prelude::{Listener, On},
-    PickableBundle,
-};
-use bevy_rapier3d::prelude::*;
 
 use crate::{cleanup, events::MoveEvent, GameAssets};
 
@@ -38,16 +38,14 @@ impl app::Plugin for Plugin {
             )
             .add_systems(
                 OnEnter(GameState::Playing),
-                (setup_board, setup_pieces, setup_ui).chain(),
+                (setup_board, setup_pieces, setup_ui),
             )
             .add_systems(
                 Update,
                 (
                     perform_move,
                     update_labels,
-                    winner_found,
-                    update_menu_button,
-                    update_winner,
+                    (winner_found, update_menu_button, update_winner),
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),
@@ -140,9 +138,10 @@ impl Board {
         &mut self,
         player: usize,
         hole: usize,
-        query: &mut Query<(&mut Transform, &mut Sleeping, &mut Ccd, &mut Velocity)>,
+        query: &mut Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
         turn: &mut ResMut<PlayerTurn>,
         winner_writer: &mut EventWriter<Winner>,
+        commands: &mut Commands,
     ) {
         let entities = self.players[player].buckets[hole]
             .drain(..)
@@ -153,13 +152,15 @@ impl Board {
             index = index.next(Player(start_player));
 
             self.get_bucket_mut(index).push(ball);
-            let (mut transform, mut sleeping, mut ccd, mut velocity) = query.get_mut(ball).unwrap();
+            let (mut transform, mut linear_velocity, mut angular_velocity) =
+                query.get_mut(ball).unwrap();
             transform.translation = Self::bucket_position(index);
             transform.rotation = Quat::default();
-            velocity.linvel = Vec3::ZERO;
-            velocity.angvel = Vec3::ZERO;
-            sleeping.sleeping = false;
-            ccd.enabled = true;
+            **linear_velocity = Vector::ZERO;
+            **angular_velocity = Vector::ZERO;
+            let mut e = commands.entity(ball);
+            e.insert(SweptCcd::default());
+            e.remove::<Sleeping>();
         }
 
         if !matches!(index, Index::Score(_)) {
@@ -243,44 +244,43 @@ pub fn setup_board(
     *board = Board::default();
     let material = materials.add(StandardMaterial {
         base_color_texture: Some(
-                                game_assets.board_textures
-                                ["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_BaseColor.png"]
-                                .clone(),
-                                ),
-                                emissive_texture: Some(
-                                    game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Emissive.png"].clone(),
-                                    ),
-                                    metallic_roughness_texture: Some(
-                                        game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_MetallicRoughness.png"]
-                                        .clone(),
-                                        ),
-                                        // normal_map_texture: Some(
-                                        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Normal.png"].clone(),
-                                        // ),
-                                        // depth_map: Some(
-                                        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Height.png"].clone(),
-                                        // ),
-                                        ..Default::default()
+            game_assets.board_textures
+            ["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_BaseColor.png"]
+            .clone(),
+        ),
+        emissive_texture: Some(
+            game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Emissive.png"].clone(),
+        ),
+        metallic_roughness_texture: Some(
+            game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_MetallicRoughness.png"]
+            .clone(),
+        ),
+        // normal_map_texture: Some(
+        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Normal.png"].clone(),
+        // ),
+        // depth_map: Some(
+        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Height.png"].clone(),
+        // ),
+        ..Default::default()
     });
-    let mut mesh = meshes.get(game_assets.board_mesh.clone()).unwrap().clone();
+    let mut mesh = meshes.get(&game_assets.board_mesh).unwrap().clone();
     mesh.generate_tangents().unwrap();
 
     commands.spawn((
         GameUi,
-        RigidBody::Fixed,
-        AsyncCollider(ComputedColliderShape::TriMesh),
+        RigidBody::Static,
+        ColliderConstructor::TrimeshFromMesh,
         GravityScale(0.25),
-        ColliderMassProperties::Mass(1000.0),
+        Mass(1000.0),
         Friction {
-            coefficient: 10.0,
-            combine_rule: CoefficientCombineRule::Max,
+            static_coefficient: 100.0,
+            dynamic_coefficient: 100.0,
+            // combine_rule: CoefficientCombine::Max,
+            ..Default::default()
         },
         Name::from("Board"),
-        PbrBundle {
-            mesh: meshes.add(mesh),
-            material,
-            ..default()
-        },
+        Mesh3d(meshes.add(mesh)),
+        MeshMaterial3d(material),
     ));
 
     let mesh = meshes.add(Sphere { radius: 0.03 }.mesh().ico(3).unwrap());
@@ -292,49 +292,54 @@ pub fn setup_board(
                 Board::bucket_position(Index::Player(Player(player), Hole(hole)));
             bucket_position.y = 0.01;
             let color = match player {
-                0 => Color::rgba(0.0, 0.0, 1.0, 1.0),
-                _ => Color::rgba(0.0, 1.0, 0.0, 1.0),
+                0 => Color::linear_rgba(0.0, 0.0, 1.0, 1.0),
+                _ => Color::linear_rgba(0.0, 1.0, 0.0, 1.0),
             };
-            commands.spawn((
-                GameUi,
-                Player(player),
-                Hole(hole),
-                PointLightBundle {
-                    point_light: PointLight {
+            commands
+                .spawn((
+                    GameUi,
+                    Player(player),
+                    Hole(hole),
+                    PointLight {
+                        color,
                         intensity: 0.0,
                         range: 0.5,
                         radius: 0.5,
-                        color,
                         ..Default::default()
                     },
-                    transform: Transform::from_translation(bucket_position),
-                    ..Default::default()
-                },
-                mesh.clone(),
-                Collider::ball(0.03),
-                Sensor,
-                PickableBundle::default(),
-                On::<Pointer<Over>>::run(
-                    move |event: Listener<Pointer<Over>>,
+                    Transform::from_translation(bucket_position),
+                    Mesh3d(mesh.clone()),
+                    Collider::sphere(0.03),
+                    Sensor,
+                    PhysicsPickable,
+                ))
+                .observe(
+                    move |over: Trigger<Pointer<Over>>,
                           mut lights: Query<&mut PointLight>,
                           turn: Res<PlayerTurn>,
                           game_state: Res<State<GameState>>| {
                         if *game_state != GameState::Playing {
                             return;
                         }
-
                         if turn.0 != player {
                             return;
                         }
-                        let mut light = lights.get_mut(event.listener()).unwrap();
+                        let entity = over.entity();
+                        // let mut light = lights.get_mut(event.listener()).unwrap();
+                        let mut light = lights.get_mut(entity).unwrap();
                         light.intensity = 1000.0;
                     },
-                ),
-                On::<Pointer<Out>>::target_component_mut(|_, light: &mut PointLight| {
-                    light.intensity = 0.0;
-                }),
-                On::<Pointer<Down>>::run(
-                    move |mut selected: ResMut<Selected>,
+                )
+                .observe(
+                    |out: Trigger<Pointer<Out>>, mut lights: Query<&mut PointLight>| {
+                        let entity = out.entity();
+                        let mut light = lights.get_mut(entity).unwrap();
+                        light.intensity = 0.0;
+                    },
+                )
+                .observe(
+                    move |_down: Trigger<Pointer<Down>>,
+                          mut selected: ResMut<Selected>,
                           turn: Res<PlayerTurn>,
                           board: Res<Board>,
                           game_state: Res<State<GameState>>| {
@@ -344,9 +349,10 @@ pub fn setup_board(
 
                         selected.0 = Some(Index::Player(Player(player), Hole(hole)));
                     },
-                ),
-                On::<Pointer<Up>>::run(
-                    move |mut selected: ResMut<Selected>,
+                )
+                .observe(
+                    move |_up: Trigger<Pointer<Up>>,
+                          mut selected: ResMut<Selected>,
                           turn: Res<PlayerTurn>,
                           board: Res<Board>,
                           mut move_events: EventWriter<MoveEvent>,
@@ -364,8 +370,7 @@ pub fn setup_board(
                         move_events.send(MoveEvent::HoleClicked(player, hole));
                         selected.0 = None;
                     },
-                ),
-            ));
+                );
 
             let offset = match player {
                 0 => Vec3::new(0.0, 0.0, -0.1),
@@ -378,19 +383,12 @@ pub fn setup_board(
                 GameUi,
                 Player(player),
                 Hole(hole),
-                BillboardTextBundle {
-                    text: Text::from_section(
-                        "4",
-                        TextStyle {
-                            color: Color::rgba(1.0, 1.0, 1.0, 1.0),
-                            font_size: 50.0,
-                            ..Default::default()
-                        },
-                    )
-                    .with_justify(JustifyText::Center),
-                    transform,
-                    ..Default::default()
-                },
+                // Hopefully this will allow billboarding text
+                Text2d::new("4"),
+                TextFont::from_font_size(50.0),
+                TextColor(Color::linear_rgba(1.0, 1.0, 1.0, 1.0)),
+                TextLayout::new_with_justify(JustifyText::Center),
+                transform,
             ));
         }
     }
@@ -423,20 +421,22 @@ pub fn winner_found(
     }
 }
 
+type InteractionsData<'world> = (&'world Interaction, &'world Children);
+
 fn update_menu_button(
     mut state: ResMut<NextState<GameState>>,
-    interactions: Query<(&Interaction, &Children), (With<MainMenuButton>, Changed<Interaction>)>,
-    mut text_query: Query<&mut Text>,
+    interactions: Query<InteractionsData, (With<MainMenuButton>, Changed<Interaction>)>,
+    mut text_query: Query<&mut TextColor>,
 ) {
     for (interaction, children) in interactions.iter() {
-        let mut text = text_query.get_mut(children[0]).unwrap();
+        let mut text_color = text_query.get_mut(children[0]).unwrap();
         match interaction {
             Interaction::Pressed => state.set(GameState::Menu),
             Interaction::Hovered => {
-                text.sections[0].style.color = Color::WHITE;
+                **text_color = Color::WHITE;
             }
             Interaction::None => {
-                text.sections[0].style.color = Color::GRAY;
+                **text_color = Color::Srgba(SLATE_GRAY);
             }
         }
     }
@@ -445,43 +445,76 @@ fn update_menu_button(
 pub fn perform_move(
     mut move_events: EventReader<MoveEvent>,
     mut board: ResMut<Board>,
-    mut transforms: Query<(&mut Transform, &mut Sleeping, &mut Ccd, &mut Velocity)>,
+    mut transforms: Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
     mut turns: ResMut<PlayerTurn>,
     mut winner: EventWriter<Winner>,
+    mut commands: Commands,
 ) {
     for event in move_events.read() {
         match *event {
             MoveEvent::HoleClicked(player, hole) => {
-                board.perform_move(player, hole, &mut transforms, &mut turns, &mut winner);
+                board.perform_move(
+                    player,
+                    hole,
+                    &mut transforms,
+                    &mut turns,
+                    &mut winner,
+                    &mut commands,
+                );
             }
         }
     }
 }
 
+#[derive(QueryData)]
+#[query_data(mutable, derive(Debug))]
+pub struct BucketData {
+    player: &'static Player,
+    hole: &'static Hole,
+    text: &'static mut Text2d,
+}
+
+#[derive(QueryData)]
+#[query_data(mutable, derive(Debug))]
+pub struct TextData {
+    player: &'static Player,
+    text: &'static mut Text2d,
+}
+
 pub fn update_labels(
     board: Res<Board>,
     turn: Res<PlayerTurn>,
-    mut buckets: Query<(&Player, &Hole, &mut Text), (Without<Score>, Without<Turn>)>,
-    mut score: Query<(&Player, &mut Text), (With<Score>, Without<Turn>)>,
-    mut turns: Query<(&Player, &mut Text), (With<Turn>, Without<Score>)>,
+    mut buckets: Query<BucketData, (Without<Score>, Without<Turn>)>,
+    mut score: Query<TextData, (With<Score>, Without<Turn>)>,
+    mut turns: Query<TextData, (With<Turn>, Without<Score>)>,
 ) {
-    for (player, hole, mut text) in buckets.iter_mut() {
-        let count = board.get_bucket(Index::Player(*player, *hole)).len();
-        text.sections[0].value = count.to_string();
-    }
+    buckets.par_iter_mut().for_each(
+        |BucketDataItem {
+             player,
+             hole,
+             mut text,
+         }| {
+            let count = board.get_bucket(Index::Player(*player, *hole)).len();
+            **text = count.to_string();
+        },
+    );
 
-    for (player, mut text) in score.iter_mut() {
-        let count = board.get_bucket(Index::Score(*player)).len();
-        text.sections[0].value = count.to_string();
-    }
+    score
+        .par_iter_mut()
+        .for_each(|TextDataItem { player, mut text }| {
+            let count = board.get_bucket(Index::Score(*player)).len();
+            **text = count.to_string();
+        });
 
-    for (player, mut text) in turns.iter_mut() {
-        if player.0 == turn.0 {
-            text.sections[0].value = "*".to_string();
-        } else {
-            text.sections[0].value = "  ".to_string();
-        }
-    }
+    turns
+        .par_iter_mut()
+        .for_each(|TextDataItem { player, mut text }| {
+            if player.0 == turn.0 {
+                **text = "*".to_string();
+            } else {
+                **text = " ".to_string();
+            }
+        });
 }
 
 pub fn setup_pieces(
@@ -499,8 +532,9 @@ pub fn setup_pieces(
     let mut mat_iter = material_list.into_iter().cycle();
 
     let collider_mesh = meshes.get(&game_assets.piece_collider).unwrap();
-    let collider =
-        Collider::from_bevy_mesh(&collider_mesh, &ComputedColliderShape::ConvexHull).unwrap();
+    let mut collider = Collider::convex_hull_from_mesh(collider_mesh)
+        .expect("Failed to create convex hull collider for piece");
+    collider.set_scale(Vector::splat(1.5), 2);
 
     tracing::info!("Spawning pieces");
     for player in 0..PLAYER_COUNT {
@@ -520,33 +554,24 @@ pub fn setup_pieces(
                             GameUi,
                             RigidBody::Dynamic,
                             collider.clone(),
-                            ColliderScale::Relative(Vect::splat(1.5)),
                             GravityScale(1.0),
-                            ColliderMassProperties::Mass(10.0),
-                            Velocity {
-                                linvel: Vec3::ZERO,
-                                angvel: Vec3::ZERO,
-                            },
-                            Damping {
-                                linear_damping: 50.0,
-                                angular_damping: 0.5,
-                            },
+                            // ColliderMassProperties::Mass(10.0),
+                            Mass(10.0),
+                            LinearVelocity(Vec3::ZERO),
+                            AngularVelocity(Vec3::ZERO),
+                            LinearDamping(50.0),
+                            AngularDamping(0.5),
                             Friction {
-                                coefficient: 100.0,
-                                combine_rule: CoefficientCombineRule::Max,
-                            },
-                            PbrBundle {
-                                mesh: mesh.clone(),
-                                material: mat_iter.next().expect("cycles").clone(),
-                                transform: Transform::from_translation(position + perturb)
-                                    .with_scale(Vec3::splat(SCALE)),
-                                ..default()
-                            },
-                            Ccd::enabled(),
-                            Sleeping {
-                                sleeping: false,
+                                static_coefficient: 100.0,
+                                dynamic_coefficient: 100.0,
+                                // combine_rule: CoefficientCombine::Max,
                                 ..Default::default()
                             },
+                            Mesh3d(mesh.clone()),
+                            MeshMaterial3d(mat_iter.next().expect("cycles").clone()),
+                            Transform::from_translation(position + perturb)
+                                .with_scale(Vec3::splat(SCALE)),
+                            SweptCcd::default(),
                         ))
                         .id(),
                 );
@@ -652,16 +677,13 @@ fn setup_ui(mut commands: Commands) {
     commands
         .spawn((
             GameUi,
-            NodeBundle {
-                style: Style {
-                    display: Display::Flex,
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(10.0),
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Start,
-                    justify_content: JustifyContent::SpaceAround,
-                    ..Default::default()
-                },
+            Node {
+                display: Display::Flex,
+                width: Val::Percent(100.0),
+                height: Val::Percent(10.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Start,
+                justify_content: JustifyContent::SpaceAround,
                 ..Default::default()
             },
         ))
@@ -669,126 +691,77 @@ fn setup_ui(mut commands: Commands) {
             parent.spawn((
                 Player(1),
                 Score,
-                TextBundle {
-                    text: Text::from_section(
-                        "0",
-                        TextStyle {
-                            font_size: 40.0,
-                            color: Color::GREEN,
-                            ..Default::default()
-                        },
-                    )
-                    .with_justify(JustifyText::Left),
-                    style: Style {
-                        justify_self: JustifySelf::Center,
-                        ..Default::default()
-                    },
+                Text::new("0"),
+                TextFont::from_font_size(40.0),
+                TextColor(Color::Srgba(GREEN)),
+                TextLayout::new_with_justify(JustifyText::Left),
+                Node {
+                    justify_self: JustifySelf::Center,
                     ..Default::default()
                 },
             ));
             parent.spawn((
                 Player(1),
                 Turn,
-                TextBundle {
-                    text: Text::from_section(
-                        "*",
-                        TextStyle {
-                            font_size: 40.0,
-                            color: Color::GREEN,
-                            ..Default::default()
-                        },
-                    )
-                    .with_justify(JustifyText::Center),
-
-                    style: Style {
-                        justify_self: JustifySelf::Center,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            ));
-            parent.spawn(TextBundle {
-                text: Text::from_section(
-                    "Mancala: African Stones",
-                    TextStyle {
-                        font_size: 50.0,
-                        color: Color::WHITE,
-                        ..Default::default()
-                    },
-                )
-                .with_justify(JustifyText::Center),
-
-                style: Style {
+                Text::new("*"),
+                TextFont::from_font_size(40.0),
+                TextColor(Color::Srgba(GREEN)),
+                TextLayout::new_with_justify(JustifyText::Center),
+                Node {
                     justify_self: JustifySelf::Center,
                     ..Default::default()
                 },
-                ..Default::default()
-            });
+            ));
+            parent.spawn((
+                Text::new("Mancala: African Stones"),
+                TextFont::from_font_size(50.0),
+                TextColor(Color::WHITE),
+                TextLayout::new_with_justify(JustifyText::Center),
+                Node {
+                    justify_self: JustifySelf::Center,
+                    ..Default::default()
+                },
+            ));
             parent.spawn((
                 Player(0),
                 Turn,
-                TextBundle {
-                    text: Text::from_section(
-                        "*",
-                        TextStyle {
-                            font_size: 40.0,
-                            color: Color::CYAN,
-                            ..Default::default()
-                        },
-                    )
-                    .with_justify(JustifyText::Center),
-
-                    style: Style {
-                        justify_self: JustifySelf::Center,
-                        ..Default::default()
-                    },
+                Text::new("*"),
+                TextFont::from_font_size(40.0),
+                TextColor(Color::Srgba(LIGHT_CYAN)),
+                TextLayout::new_with_justify(JustifyText::Center),
+                Node {
+                    justify_self: JustifySelf::Center,
                     ..Default::default()
                 },
             ));
             parent.spawn((
                 Player(0),
                 Score,
-                TextBundle {
-                    text: Text::from_section(
-                        "0",
-                        TextStyle {
-                            font_size: 40.0,
-                            color: Color::CYAN,
-                            ..Default::default()
-                        },
-                    )
-                    .with_justify(JustifyText::Right),
-                    style: Style {
-                        justify_self: JustifySelf::Center,
-                        ..Default::default()
-                    },
+                Text::new("0"),
+                TextFont::from_font_size(40.0),
+                TextColor(Color::Srgba(LIGHT_CYAN)),
+                TextLayout::new_with_justify(JustifyText::Right),
+                Node {
+                    justify_self: JustifySelf::Center,
                     ..Default::default()
                 },
             ));
             parent
                 .spawn((
                     MainMenuButton,
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Px(60.0),
-                            ..Default::default()
-                        },
-                        background_color: BackgroundColor(Color::NONE),
+                    Button,
+                    Node {
+                        width: Val::Px(60.0),
                         ..Default::default()
                     },
+                    BackgroundColor(Color::NONE),
                 ))
                 .with_children(|parent| {
-                    parent.spawn((TextBundle {
-                        text: Text::from_section(
-                            "Main Menu".to_string(),
-                            TextStyle {
-                                font_size: 20.0,
-                                color: Color::GRAY,
-                                ..Default::default()
-                            },
-                        ),
-                        ..Default::default()
-                    },));
+                    parent.spawn((
+                        Text::new("Main Menu"),
+                        TextFont::from_font_size(20.0),
+                        TextColor(Color::Srgba(SLATE_GRAY)),
+                    ));
                 });
         });
 }
@@ -806,45 +779,35 @@ fn spawn_win_text(winner: usize, commands: &mut Commands) {
     assert!(winner < 2, "Invalid winner index");
 
     const WIN_COLOR: [&str; 2] = ["Blue", "Green"];
-    const COLORS: [Color; 2] = [Color::CYAN, Color::GREEN];
+    const COLORS: [Color; 2] = [Color::Srgba(LIGHT_CYAN), Color::Srgba(GREEN)];
     commands
         .spawn((
             GameUi,
             WinnerButton,
-            ButtonBundle {
-                focus_policy: FocusPolicy::Pass,
-                style: Style {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    justify_content: JustifyContent::Center,
-                    align_self: AlignSelf::Center,
-                    align_content: AlignContent::Center,
-                    flex_direction: FlexDirection::Column,
-                    ..Default::default()
-                },
-                background_color: BackgroundColor(Color::NONE),
+            Button,
+            FocusPolicy::Pass,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_self: AlignSelf::Center,
+                align_content: AlignContent::Center,
+                flex_direction: FlexDirection::Column,
                 ..Default::default()
             },
+            BackgroundColor(Color::NONE),
         ))
         .with_children(|parent| {
             parent.spawn((
                 WinnerText,
-                TextBundle {
-                    text: Text::from_section(
-                        format!("Player {} Wins!", WIN_COLOR[winner]),
-                        TextStyle {
-                            font_size: 50.0,
-                            color: COLORS[winner],
-                            ..Default::default()
-                        },
-                    )
-                    .with_justify(JustifyText::Center),
-                    focus_policy: FocusPolicy::Pass,
-                    style: Style {
-                        align_self: AlignSelf::Center,
-                        justify_self: JustifySelf::Center,
-                        ..Default::default()
-                    },
+                Text::new(format!("Player {} Wins!", WIN_COLOR[winner])),
+                TextFont::from_font_size(50.0),
+                TextColor(COLORS[winner]),
+                TextLayout::new_with_justify(JustifyText::Center),
+                FocusPolicy::Pass,
+                Node {
+                    align_self: AlignSelf::Center,
+                    justify_self: JustifySelf::Center,
                     ..Default::default()
                 },
             ));
@@ -856,9 +819,8 @@ fn update_winner(
     interactions: Query<&Interaction, (With<WinnerButton>, Changed<Interaction>)>,
 ) {
     for interaction in interactions.iter() {
-        match interaction {
-            Interaction::Pressed => state.set(GameState::Menu),
-            _ => {}
+        if interaction == &Interaction::Pressed {
+            state.set(GameState::Menu)
         }
     }
 }

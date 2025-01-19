@@ -1,10 +1,9 @@
+use avian3d::prelude::Collider;
 use bevy::{
     app,
-    asset::{io::Reader, AssetLoader, AsyncReadExt, LoadContext},
+    asset::{io::Reader, AssetLoader, LoadContext},
     prelude::*,
-    utils::BoxedFuture,
 };
-use bevy_rapier3d::geometry::Collider;
 
 pub(crate) struct Plugin;
 
@@ -36,18 +35,16 @@ impl AssetLoader for ColliderLoader {
     type Settings = ();
     type Error = Error;
 
-    fn load<'a>(
-        &'a self,
-        reader: &'a mut Reader,
-        _settings: &'a Self::Settings,
-        _load_context: &'a mut LoadContext,
-    ) -> BoxedFuture<'a, Result<ColliderWrapper, Self::Error>> {
-        Box::pin(async move {
-            let mut bytes = vec![];
-            reader.read_to_end(&mut bytes).await?;
-            let collider = rmp_serde::from_slice(&bytes)?;
-            Ok(ColliderWrapper(collider))
-        })
+    async fn load(
+        &self,
+        reader: &mut dyn Reader,
+        _settings: &Self::Settings,
+        _load_context: &mut LoadContext<'_>,
+    ) -> Result<ColliderWrapper, Self::Error> {
+        let mut bytes = vec![];
+        reader.read_to_end(&mut bytes).await?;
+        let collider = rmp_serde::from_slice(&bytes)?;
+        Ok(ColliderWrapper(collider))
     }
 
     fn extensions(&self) -> &[&str] {
