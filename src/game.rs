@@ -19,6 +19,14 @@ pub const STARTING_PIECES: usize = 4;
 
 pub struct Plugin;
 
+#[derive(PhysicsLayer, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) enum GameLayer {
+    #[default]
+    Default,
+    PhysicsObject,
+    MouseObject,
+}
+
 impl app::Plugin for Plugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Board::default())
@@ -35,21 +43,23 @@ impl app::Plugin for Plugin {
                         "dynamic.assets.ron",
                     )
                     .load_collection::<GameAssets>(),
+                // .init_resource::<BoardCollider>(),
             )
             .add_systems(
                 OnEnter(GameState::Playing),
-                (setup_board, setup_pieces, setup_ui),
+                (setup_board, setup_stones, setup_ui).chain(),
             )
             .add_systems(
-                Update,
+                FixedUpdate,
                 (
                     perform_move,
                     update_labels,
                     (winner_found, update_menu_button, update_winner),
                 )
-                    .chain()
+                    // .chain()
                     .run_if(in_state(GameState::Playing)),
             )
+            .add_systems(Update, update_to_sleep)
             .add_systems(
                 OnExit(GameState::Playing),
                 (cleanup::<GameUi>, cleanup::<WinnerUi>),
@@ -134,6 +144,7 @@ impl Board {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn perform_move(
         &mut self,
         player: usize,
@@ -141,25 +152,23 @@ impl Board {
         query: &mut Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
         turn: &mut ResMut<PlayerTurn>,
         winner_writer: &mut EventWriter<Winner>,
+        to_sleep: &mut Option<ResMut<ToSleep>>,
         commands: &mut Commands,
     ) {
-        let entities = self.players[player].buckets[hole]
-            .drain(..)
-            .collect::<Vec<_>>();
+        let entities = std::mem::take(&mut self.players[player].buckets[hole]);
         let start_player = player;
         let mut index = Index::Player(Player(start_player), Hole(hole));
-        for ball in entities.into_iter() {
+        for stone in entities.into_iter() {
             index = index.next(Player(start_player));
 
-            self.get_bucket_mut(index).push(ball);
+            self.get_bucket_mut(index).push(stone);
             let (mut transform, mut linear_velocity, mut angular_velocity) =
-                query.get_mut(ball).unwrap();
+                query.get_mut(stone).unwrap();
             transform.translation = Self::bucket_position(index);
-            transform.rotation = Quat::default();
+            transform.rotation = Quat::from_rotation_x(90.0);
             **linear_velocity = Vector::ZERO;
             **angular_velocity = Vector::ZERO;
-            let mut e = commands.entity(ball);
-            e.insert(SweptCcd::default());
+            let mut e = commands.entity(stone);
             e.remove::<Sleeping>();
         }
 
@@ -180,6 +189,8 @@ impl Board {
                 .unwrap()
                 .0;
             winner_writer.send(Winner(winner));
+        } else {
+            to_sleep.as_mut().map(|t| t.reset());
         }
     }
 }
@@ -216,6 +227,9 @@ pub struct Player(pub usize);
 pub struct Hole(pub usize);
 
 #[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
+pub struct Stone;
+
+#[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
 pub struct Score;
 
 #[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
@@ -233,57 +247,39 @@ pub struct Winner(pub usize);
 #[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
 pub struct WinnerText;
 
+#[derive(Debug, Clone, Resource, Reflect, PartialEq, Eq, Deref, DerefMut)]
+pub struct ToSleep(pub Timer);
+
+impl Default for ToSleep {
+    fn default() -> Self {
+        Self(Timer::from_seconds(0.5, TimerMode::Once))
+    }
+}
+
 pub fn setup_board(
     mut board: ResMut<Board>,
     mut commands: Commands,
     game_assets: Res<GameAssets>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    // board_collider: Res<BoardCollider>,
 ) {
-    tracing::trace!("Textures: {:#?}", game_assets.board_textures);
     *board = Board::default();
-    let material = materials.add(StandardMaterial {
-        base_color_texture: Some(
-            game_assets.board_textures
-            ["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_BaseColor.png"]
-            .clone(),
-        ),
-        emissive_texture: Some(
-            game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Emissive.png"].clone(),
-        ),
-        metallic_roughness_texture: Some(
-            game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_MetallicRoughness.png"]
-            .clone(),
-        ),
-        // normal_map_texture: Some(
-        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Normal.png"].clone(),
-        // ),
-        // depth_map: Some(
-        //     game_assets.board_textures["scenes/mancala_board/textures/mancala_board_hi_standardSurface1_Height.png"].clone(),
-        // ),
-        ..Default::default()
-    });
-    let mut mesh = meshes.get(&game_assets.board_mesh).unwrap().clone();
-    mesh.generate_tangents().unwrap();
+
+    // let board_mesh = meshes.get(&game_assets.board_collider).unwrap();
+    // let collider = board_collider.0.clone();
+    let collider = ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh);
 
     commands.spawn((
         GameUi,
         RigidBody::Static,
-        ColliderConstructor::TrimeshFromMesh,
-        GravityScale(0.25),
-        Mass(1000.0),
-        Friction {
-            static_coefficient: 100.0,
-            dynamic_coefficient: 100.0,
-            // combine_rule: CoefficientCombine::Max,
-            ..Default::default()
-        },
+        collider,
+        CollisionMargin(0.005),
+        CollisionLayers::new(GameLayer::PhysicsObject, GameLayer::PhysicsObject),
+        Friction::new(1.0),
         Name::from("Board"),
-        Mesh3d(meshes.add(mesh)),
-        MeshMaterial3d(material),
+        SceneRoot::from(game_assets.board_scene.clone()),
     ));
 
-    let mesh = meshes.add(Sphere { radius: 0.03 }.mesh().ico(3).unwrap());
+    // let mesh = meshes.add(Sphere { radius: 0.03 }.mesh().ico(3).unwrap());
 
     for player in 0..PLAYER_COUNT {
         for hole in 0..HOLE_COUNT {
@@ -297,6 +293,7 @@ pub fn setup_board(
             };
             commands
                 .spawn((
+                    Name::from(format!("bucket_{player}_{hole}")),
                     GameUi,
                     Player(player),
                     Hole(hole),
@@ -308,8 +305,9 @@ pub fn setup_board(
                         ..Default::default()
                     },
                     Transform::from_translation(bucket_position),
-                    Mesh3d(mesh.clone()),
+                    // Mesh3d(mesh.clone()),
                     Collider::sphere(0.03),
+                    CollisionLayers::new(GameLayer::MouseObject, GameLayer::MouseObject),
                     Sensor,
                     PhysicsPickable,
                 ))
@@ -321,12 +319,12 @@ pub fn setup_board(
                         if *game_state != GameState::Playing {
                             return;
                         }
+                        let entity = over.entity();
+                        let mut light = lights.get_mut(entity).unwrap();
                         if turn.0 != player {
+                            light.intensity = 0.0;
                             return;
                         }
-                        let entity = over.entity();
-                        // let mut light = lights.get_mut(event.listener()).unwrap();
-                        let mut light = lights.get_mut(entity).unwrap();
                         light.intensity = 1000.0;
                     },
                 )
@@ -380,6 +378,7 @@ pub fn setup_board(
                 Transform::from_translation(bucket_position + offset + Vec3::new(0.0, 0.05, 0.0))
                     .with_scale(Vec3::splat(0.001));
             commands.spawn((
+                Name::from(format!("bucket_label_{player}_{hole}")),
                 GameUi,
                 Player(player),
                 Hole(hole),
@@ -442,13 +441,16 @@ fn update_menu_button(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn perform_move(
     mut move_events: EventReader<MoveEvent>,
     mut board: ResMut<Board>,
     mut transforms: Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
     mut turns: ResMut<PlayerTurn>,
     mut winner: EventWriter<Winner>,
+    mut to_sleep: Option<ResMut<ToSleep>>,
     mut commands: Commands,
+    mut lights: Query<&mut PointLight>,
 ) {
     for event in move_events.read() {
         match *event {
@@ -459,8 +461,13 @@ pub fn perform_move(
                     &mut transforms,
                     &mut turns,
                     &mut winner,
+                    &mut to_sleep,
                     &mut commands,
                 );
+                // Make all the lights go out for now.
+                lights.par_iter_mut().for_each(|mut light| {
+                    light.intensity = 0.0;
+                });
             }
         }
     }
@@ -517,28 +524,24 @@ pub fn update_labels(
         });
 }
 
-pub fn setup_pieces(
+pub fn setup_stones(
     mut commands: Commands,
-    meshes: Res<Assets<Mesh>>,
-    materials: ResMut<Assets<StandardMaterial>>,
     mut board: ResMut<Board>,
     game_assets: Res<GameAssets>,
+    meshes: Res<Assets<Mesh>>,
 ) {
-    const BALL_RADIUS: f32 = 0.005;
+    const BALL_RADIUS: f32 = 0.007;
     const SCALE: f32 = 0.8;
 
-    let mesh = game_assets.piece_mesh.clone();
-    let material_list = generate_materials(materials, &game_assets);
-    let mut mat_iter = material_list.into_iter().cycle();
+    let mut materials = game_assets.stone_materials.iter().cycle().cloned();
 
-    let collider_mesh = meshes.get(&game_assets.piece_collider).unwrap();
-    let mut collider = Collider::convex_hull_from_mesh(collider_mesh)
-        .expect("Failed to create convex hull collider for piece");
-    collider.set_scale(Vector::splat(1.5), 2);
+    let mesh = meshes.get(&game_assets.stone_collider).unwrap();
+    let collider = Collider::convex_hull_from_mesh(mesh).unwrap();
 
-    tracing::info!("Spawning pieces");
+    tracing::info!("Spawning stones");
     for player in 0..PLAYER_COUNT {
         for hole in 0..HOLE_COUNT {
+            // let hole = 0;
             for i in 0..STARTING_PIECES {
                 let position = Board::bucket_position(Index::Player(Player(player), Hole(hole)));
                 let perturb = Vec3::new(
@@ -551,126 +554,43 @@ pub fn setup_pieces(
                 board.players[player].buckets[hole].push(
                     commands
                         .spawn((
+                            Name::from(format!("stone_{player}_{hole}_{i}")),
+                            Stone,
                             GameUi,
                             RigidBody::Dynamic,
                             collider.clone(),
-                            GravityScale(1.0),
-                            // ColliderMassProperties::Mass(10.0),
-                            Mass(10.0),
-                            LinearVelocity(Vec3::ZERO),
-                            AngularVelocity(Vec3::ZERO),
-                            LinearDamping(50.0),
-                            AngularDamping(0.5),
-                            Friction {
-                                static_coefficient: 100.0,
-                                dynamic_coefficient: 100.0,
-                                // combine_rule: CoefficientCombine::Max,
-                                ..Default::default()
-                            },
-                            Mesh3d(mesh.clone()),
-                            MeshMaterial3d(mat_iter.next().expect("cycles").clone()),
-                            Transform::from_translation(position + perturb)
-                                .with_scale(Vec3::splat(SCALE)),
-                            SweptCcd::default(),
+                            CollisionMargin(0.0025),
+                            CollisionLayers::new(
+                                GameLayer::PhysicsObject,
+                                GameLayer::PhysicsObject,
+                            ),
+                            // ToSleep::default(),
+                            // Physics
+                            (
+                                GravityScale(0.25),
+                                Mass(0.0001),
+                                LinearVelocity(Vec3::ZERO),
+                                AngularVelocity(Vec3::ZERO),
+                                Restitution::new(0.01),
+                                LinearDamping(0.999),
+                                AngularDamping(100.0),
+                                Friction::new(0.9),
+                                Mesh3d(game_assets.stone_mesh.clone()),
+                                MeshMaterial3d(materials.next().expect("cycles")),
+                                Transform::from_translation(position + perturb)
+                                    .with_rotation(Quat::from_rotation_x(90.0))
+                                    .with_scale(Vec3::splat(SCALE)),
+                                SpeculativeMargin(0.005),
+                                // Maybe we'll turn this back on, but speculative is doing great.
+                                // SweptCcd::default(),
+                            ),
                         ))
                         .id(),
                 );
             }
         }
     }
-}
-
-fn generate_materials(
-    mut materials: ResMut<'_, Assets<StandardMaterial>>,
-    game_assets: &Res<GameAssets>,
-) -> Vec<Handle<StandardMaterial>> {
-    let material_list = vec![
-        materials.add(StandardMaterial {
-            base_color_texture: Some(
-                game_assets
-                    .green_textures[
-                        "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_BaseColor.png"
-                    ].clone()
-            ),
-            emissive_texture: Some(
-                game_assets
-                    .green_textures[
-                        "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_Emissive.png"
-                    ].clone()
-            ),
-            metallic_roughness_texture: Some(
-                game_assets
-                    .green_textures[
-                        "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_MetallicRoughness.png"
-                    ].clone()
-            ),
-            normal_map_texture: Some(
-                game_assets
-                    .green_textures[
-                        "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_Normal.png"
-                    ].clone()
-            ),
-            alpha_mode: AlphaMode::Blend,
-            ..Default::default()
-        }),
-        materials.add(StandardMaterial {
-            base_color_texture: Some(
-                game_assets
-                    .blue_textures[
-                        "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_BaseColor.png"
-                    ].clone()
-            ),
-            emissive_texture: Some(
-                game_assets
-                    .blue_textures[
-                        "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_Emissive.png"
-                    ].clone()
-            ),
-            metallic_roughness_texture: Some(
-                game_assets
-                    .blue_textures[
-                        "scenes/mancala_stone/textures/blue/mancala_stone_hi_standardSurface1_MetallicRoughness.png"
-                    ].clone()
-            ),
-            normal_map_texture: Some(
-                game_assets
-                    .green_textures[
-                        "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_Normal.png"
-                    ].clone()
-            ),
-            alpha_mode: AlphaMode::Blend,
-            ..Default::default()
-        }),
-        materials.add(StandardMaterial {
-            base_color_texture: Some(
-                game_assets
-                    .red_textures[
-                        "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_BaseColor.png"
-                    ].clone()
-            ),
-            emissive_texture: Some(
-                game_assets
-                    .red_textures[
-                        "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_Emissive.png"
-                    ].clone()
-            ),
-            metallic_roughness_texture: Some(
-                game_assets
-                    .red_textures[
-                        "scenes/mancala_stone/textures/red/mancala_stone_hi_standardSurface1_MetallicRoughness.png"
-                    ].clone()
-            ),
-            normal_map_texture: Some(
-                game_assets
-                    .green_textures[
-                        "scenes/mancala_stone/textures/green/mancala_stone_hi_standardSurface1_Normal.png"
-                    ].clone()
-            ),
-            alpha_mode: AlphaMode::Blend,
-            ..Default::default()
-        }),
-    ];
-    material_list
+    commands.insert_resource(ToSleep::default());
 }
 
 fn setup_ui(mut commands: Commands) {
@@ -823,4 +743,22 @@ fn update_winner(
             state.set(GameState::Menu)
         }
     }
+}
+
+fn update_to_sleep(
+    mut commands: Commands,
+    delta_time: Res<Time>,
+    to_sleep: Option<ResMut<ToSleep>>,
+    mut timer: Query<Entity, With<Stone>>,
+) {
+    let Some(mut to_sleep) = to_sleep else {
+        return;
+    };
+    to_sleep.0.tick(delta_time.delta());
+    timer.iter_mut().for_each(move |entity| {
+        if to_sleep.0.just_finished() {
+            let mut stone = commands.entity(entity);
+            stone.insert(Sleeping);
+        }
+    });
 }

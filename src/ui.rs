@@ -14,7 +14,6 @@ impl app::Plugin for Plugin {
             OnEnter(GameState::Menu),
             (setup_graphics, setup_menu).chain(),
         )
-        .add_systems(Update, (update_menu,).run_if(in_state(GameState::Menu)))
         .add_systems(OnExit(GameState::Menu), cleanup::<Menu>);
     }
 }
@@ -31,6 +30,7 @@ struct QuitButton;
 fn setup_menu(mut commands: Commands) {
     commands
         .spawn((
+            Name::new("MainMenu"),
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
@@ -50,6 +50,14 @@ fn setup_menu(mut commands: Commands) {
             ));
             parent
                 .spawn((StartButton, Button, BackgroundColor(Color::NONE)))
+                .observe(hover_button)
+                .observe(unhover_button)
+                .observe(
+                    |_trigger: Trigger<Pointer<Click>>,
+                     mut next_state: ResMut<NextState<GameState>>| {
+                        next_state.set(GameState::Playing);
+                    },
+                )
                 .with_children(|parent| {
                     parent.spawn((
                         Text::new("Start Game"),
@@ -59,6 +67,13 @@ fn setup_menu(mut commands: Commands) {
                 });
             parent
                 .spawn((QuitButton, Button, BackgroundColor(Color::NONE)))
+                .observe(hover_button)
+                .observe(unhover_button)
+                .observe(
+                    |_click: Trigger<Pointer<Click>>, mut exit: EventWriter<AppExit>| {
+                        exit.send(AppExit::Success);
+                    },
+                )
                 .with_children(|parent| {
                     parent.spawn((
                         Text::new("Quit"),
@@ -69,40 +84,22 @@ fn setup_menu(mut commands: Commands) {
         });
 }
 
-type InteractionData<'world> = (&'world Interaction, &'world Children);
-
-fn update_menu(
-    mut state: ResMut<NextState<GameState>>,
-    mut exit: EventWriter<AppExit>,
-    start_interactions: Query<InteractionData, (With<StartButton>, Changed<Interaction>)>,
-    quit_interactions: Query<InteractionData, (With<QuitButton>, Changed<Interaction>)>,
-    mut text_query: Query<&mut TextColor>,
+fn hover_button(
+    trigger: Trigger<Pointer<Over>>,
+    children: Query<&Children>,
+    mut colors: Query<&mut TextColor>,
 ) {
-    for (interaction, children) in start_interactions.iter() {
-        let mut color = text_query.get_mut(children[0]).unwrap();
-        match interaction {
-            Interaction::Pressed => state.set(GameState::Playing),
-            Interaction::Hovered => {
-                **color = Color::Srgba(GOLD);
-            }
-            Interaction::None => {
-                **color = Color::WHITE;
-            }
-        };
-    }
+    let children = children.get(trigger.entity()).unwrap();
+    let mut color = colors.get_mut(children[0]).unwrap();
+    **color = Color::Srgba(GOLD);
+}
 
-    for (interaction, children) in quit_interactions.iter() {
-        let mut color = text_query.get_mut(children[0]).unwrap();
-        match interaction {
-            Interaction::Pressed => {
-                exit.send(AppExit::Success);
-            }
-            Interaction::Hovered => {
-                **color = Color::Srgba(GOLD);
-            }
-            Interaction::None => {
-                **color = Color::WHITE;
-            }
-        };
-    }
+fn unhover_button(
+    trigger: Trigger<Pointer<Out>>,
+    children: Query<&Children>,
+    mut colors: Query<&mut TextColor>,
+) {
+    let children = children.get(trigger.entity()).unwrap();
+    let mut color = colors.get_mut(children[0]).unwrap();
+    **color = Color::WHITE;
 }
