@@ -22,6 +22,8 @@ pub(crate) fn setup_graphics(mut commands: Commands, cameras: Query<Entity, With
         // },
         PhysicsPickable,
         Transform::from_xyz(0.0, 0.45, 0.45).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+        #[cfg(target_os = "android")]
+        Msaa::Off,
     ));
 
     commands.spawn((
