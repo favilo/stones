@@ -32,6 +32,8 @@ pub struct GameAssets {
     //
     // #[asset(key = "stone_scene")]
     // pub stone_scenes: Handle<Scene>,
+    #[asset(key = "main_font")]
+    pub main_font: Handle<Font>,
 }
 
 #[derive(Debug, thiserror::Error)]

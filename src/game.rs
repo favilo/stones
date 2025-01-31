@@ -389,7 +389,7 @@ pub fn setup_board(
                 Hole(hole),
                 BillboardText::new("4"),
                 TextLayout::new_with_justify(JustifyText::Center),
-                TextFont::from_font_size(50.0),
+                TextFont::from_font(game_assets.main_font.clone()).with_font_size(50.0),
                 TextColor(Color::WHITE),
                 // transform,
                 Transform::IDENTITY,
@@ -416,12 +416,13 @@ pub fn winner_found(
     mut winner: EventReader<Winner>,
     mut lights: Query<&mut PointLight>,
     mut commands: Commands,
+    game_assets: Res<GameAssets>,
 ) {
     if let Some(Winner(winner)) = winner.read().next() {
         for mut light in lights.iter_mut() {
             light.intensity = 0.0;
         }
-        spawn_win_text(*winner, &mut commands);
+        spawn_win_text(*winner, &mut commands, &game_assets);
     }
 }
 
@@ -576,7 +577,7 @@ pub fn setup_stones(
     commands.insert_resource(ToSleep::default());
 }
 
-fn setup_ui(mut commands: Commands) {
+fn setup_ui(mut commands: Commands, game_assets: Res<GameAssets>) {
     commands
         .spawn((
             GameUi,
@@ -595,7 +596,7 @@ fn setup_ui(mut commands: Commands) {
                 Player(1),
                 Score,
                 Text::new("0"),
-                TextFont::from_font_size(40.0),
+                TextFont::from_font(game_assets.main_font.clone()).with_font_size(40.0),
                 TextColor(Color::Srgba(GREEN)),
                 TextLayout::new_with_justify(JustifyText::Left),
                 Node {
@@ -607,7 +608,7 @@ fn setup_ui(mut commands: Commands) {
                 Player(1),
                 Turn,
                 Text::new("*"),
-                TextFont::from_font_size(40.0),
+                TextFont::from_font(game_assets.main_font.clone()).with_font_size(40.0),
                 TextColor(Color::Srgba(GREEN)),
                 TextLayout::new_with_justify(JustifyText::Center),
                 Node {
@@ -617,7 +618,7 @@ fn setup_ui(mut commands: Commands) {
             ));
             parent.spawn((
                 Text::new("Mancala: African Stones"),
-                TextFont::from_font_size(50.0),
+                TextFont::from_font(game_assets.main_font.clone()).with_font_size(50.0),
                 TextColor(Color::WHITE),
                 TextLayout::new_with_justify(JustifyText::Center),
                 Node {
@@ -629,7 +630,7 @@ fn setup_ui(mut commands: Commands) {
                 Player(0),
                 Turn,
                 Text::new("*"),
-                TextFont::from_font_size(40.0),
+                TextFont::from_font(game_assets.main_font.clone()).with_font_size(40.0),
                 TextColor(Color::Srgba(DARK_CYAN)),
                 TextLayout::new_with_justify(JustifyText::Center),
                 Node {
@@ -641,7 +642,7 @@ fn setup_ui(mut commands: Commands) {
                 Player(0),
                 Score,
                 Text::new("0"),
-                TextFont::from_font_size(40.0),
+                TextFont::from_font(game_assets.main_font.clone()).with_font_size(40.0),
                 TextColor(Color::Srgba(DARK_CYAN)),
                 TextLayout::new_with_justify(JustifyText::Right),
                 Node {
@@ -669,7 +670,7 @@ fn setup_ui(mut commands: Commands) {
                 .with_children(|parent| {
                     parent.spawn((
                         Text::new("Main Menu"),
-                        TextFont::from_font_size(20.0),
+                        TextFont::from_font(game_assets.main_font.clone()).with_font_size(20.0),
                         TextColor(Color::Srgba(SLATE_GRAY)),
                     ));
                 });
@@ -685,7 +686,7 @@ struct WinnerButton;
 #[derive(Debug, Default, Clone, Copy, Component)]
 struct MainMenuButton;
 
-fn spawn_win_text(winner: usize, commands: &mut Commands) {
+fn spawn_win_text(winner: usize, commands: &mut Commands, game_assets: &Res<GameAssets>) {
     assert!(winner < 2, "Invalid winner index");
 
     const WIN_COLOR: [&str; 2] = ["Blue", "Green"];
@@ -718,7 +719,7 @@ fn spawn_win_text(winner: usize, commands: &mut Commands) {
             parent.spawn((
                 WinnerText,
                 Text::new(format!("Player {} Wins!", WIN_COLOR[winner])),
-                TextFont::from_font_size(50.0),
+                TextFont::from_font(game_assets.main_font.clone()).with_font_size(50.0),
                 TextColor(COLORS[winner]),
                 TextLayout::new_with_justify(JustifyText::Center),
                 FocusPolicy::Pass,

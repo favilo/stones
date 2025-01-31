@@ -21,4 +21,7 @@
     "stone_collider": File (
         path: "scenes/stone_physics.glb#Mesh0/Primitive0",
     ),
+    "main_font": File (
+        path: "fonts/AfrikaTUbuntu-nAOV.ttf",
+    )
 })

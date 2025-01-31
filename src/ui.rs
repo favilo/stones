@@ -4,7 +4,7 @@ use bevy::{
     prelude::*,
 };
 
-use crate::{cleanup, game::GameState, graphics::setup_graphics};
+use crate::{assets::GameAssets, cleanup, game::GameState, graphics::setup_graphics};
 
 pub struct Plugin;
 
@@ -27,7 +27,7 @@ struct StartButton;
 #[derive(Debug, Clone, Copy, Component)]
 struct QuitButton;
 
-fn setup_menu(mut commands: Commands) {
+fn setup_menu(mut commands: Commands, game_assets: Res<GameAssets>) {
     commands
         .spawn((
             Name::new("MainMenu"),
@@ -45,7 +45,7 @@ fn setup_menu(mut commands: Commands) {
         .with_children(|parent| {
             parent.spawn((
                 Text::new("Mancala: African Stones"),
-                TextFont::from_font_size(60.0),
+                TextFont::from_font(game_assets.main_font.clone()).with_font_size(60.0),
                 TextColor(Color::WHITE),
             ));
             parent
@@ -61,7 +61,7 @@ fn setup_menu(mut commands: Commands) {
                 .with_children(|parent| {
                     parent.spawn((
                         Text::new("Start Game"),
-                        TextFont::from_font_size(40.0),
+                        TextFont::from_font(game_assets.main_font.clone()).with_font_size(40.0),
                         TextColor(Color::WHITE),
                     ));
                 });
@@ -77,7 +77,7 @@ fn setup_menu(mut commands: Commands) {
                 .with_children(|parent| {
                     parent.spawn((
                         Text::new("Quit"),
-                        TextFont::from_font_size(40.0),
+                        TextFont::from_font(game_assets.main_font.clone()).with_font_size(40.0),
                         TextColor(Color::WHITE),
                     ));
                 });
