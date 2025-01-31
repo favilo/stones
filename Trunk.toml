@@ -1,0 +1,6 @@
+[build]
+target = "index.html"
+public_url = "./"
+
+[serve]
+port = 4000

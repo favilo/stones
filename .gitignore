@@ -1,1 +1,5 @@
 /target
+/mobile/android/app/build
+**/.gradle/
+/dist
+**/*.so

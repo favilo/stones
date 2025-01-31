@@ -6,13 +6,21 @@ android:
     - ../assets/colliders
     - ../assets/dynamic.assets.ron
     # - "../assets/scenes/**/*.png"
+  game_activity: true
+  activity_source: null
+  # wry: true
   manifest:
     package: "org.favil.stones"
     version_code: 6
+    sdk:
+      target_sdk_version: 33
+      min_sdk_version: 31
     application:
+      has_code: false
       label: "Mancala: African Stones"
       theme: "@android:style/Theme.NoTitleBar.Fullscreen"
       activities:
-        - orientation: landscape
+        - name: "org.favil.stones.MainActivity"
+          orientation: landscape
     uses_permission:
       - name: "android.permission.READ_EXTERNAL_STORAGE"

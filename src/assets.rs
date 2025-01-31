@@ -1,7 +1,5 @@
-use avian3d::{math::Quaternion, prelude::Collider};
-use bevy::{app, ecs::system::SystemState, prelude::*};
-
-use crate::GameAssets;
+use bevy::{app, prelude::*};
+use bevy_asset_loader::asset_collection::AssetCollection;
 
 pub(crate) struct Plugin;
 
@@ -11,30 +9,30 @@ impl app::Plugin for Plugin {
     }
 }
 
-// #[derive(Resource, Debug, Clone, Deref, DerefMut)]
-/// Construct a board collider from the `obj` file exported from CoACD
-// pub(crate) struct BoardCollider(pub Collider);
+#[derive(AssetCollection, Resource)]
+pub struct GameAssets {
+    #[asset(key = "board_scene")]
+    pub board_scene: Handle<Scene>,
 
-// impl FromWorld for BoardCollider {
-//     fn from_world(world: &mut World) -> Self {
-//         let mut outer_state =
-//             SystemState::<(Res<GameAssets>, ResMut<Assets<Scene>>, Res<Assets<Mesh>>)>::new(world);
-//         let (game_assets, mut scenes, meshes) = outer_state.get_mut(world);
-//         let collider_scene = game_assets.board_collider.clone();
-//         let scene: &mut Scene = scenes.get_mut(&collider_scene).unwrap();
+    // #[asset(key = "board_collider")]
+    // pub board_collider: Handle<Scene>,
 
-//         let mut mesh_query = scene.world.query::<&Mesh3d>();
-//         let colliders = mesh_query
-//             .iter(&scene.world)
-//             .map(|mesh| meshes.get(&mesh.0).unwrap())
-//             .map(|mesh| Collider::convex_hull_from_mesh(mesh).unwrap())
-//             .map(|collider| (Vec3::ZERO, Quaternion::IDENTITY, collider))
-//             .collect();
+    // #[asset(key = "board_textures", collection(typed, mapped))]
+    // #[asset(image(sampler(filter = nearest)))]
+    // pub board_textures: HashMap<String, Handle<Image>>,
+    //
+    #[asset(key = "stone_mesh")]
+    pub stone_mesh: Handle<Mesh>,
 
-//         let collider = Collider::compound(colliders);
-//         Self(collider)
-//     }
-// }
+    #[asset(key = "stone_materials", collection(typed))]
+    pub stone_materials: Vec<Handle<StandardMaterial>>,
+
+    #[asset(key = "stone_collider")]
+    pub stone_collider: Handle<Mesh>,
+    //
+    // #[asset(key = "stone_scene")]
+    // pub stone_scenes: Handle<Scene>,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {

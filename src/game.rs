@@ -1,7 +1,7 @@
 use avian3d::{math::Vector, prelude::*};
 use bevy::{
     app,
-    color::palettes::css::{GREEN, LIGHT_CYAN, SLATE_GRAY},
+    color::palettes::css::{DARK_CYAN, GREEN, LIGHT_CYAN, SLATE_GRAY},
     ecs::query::QueryData,
     prelude::*,
     ui::FocusPolicy,
@@ -10,8 +10,14 @@ use bevy_asset_loader::{
     loading_state::{config::ConfigureLoadingState, LoadingState, LoadingStateAppExt},
     standard_dynamic_asset::StandardDynamicAssetCollection,
 };
+use bevy_mod_billboard::BillboardText;
 
-use crate::{cleanup, events::MoveEvent, GameAssets};
+use crate::{
+    assets::GameAssets,
+    cleanup,
+    events::MoveEvent,
+    ui::{hover_button, unhover_button},
+};
 
 pub const PLAYER_COUNT: usize = 2;
 pub const HOLE_COUNT: usize = 6;
@@ -30,8 +36,6 @@ pub(crate) enum GameLayer {
 impl app::Plugin for Plugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Board::default())
-            .insert_resource(PlayerTurn(1))
-            .insert_resource(Selected(None))
             .register_type::<Player>()
             .register_type::<Hole>()
             .init_state::<GameState>()
@@ -47,19 +51,13 @@ impl app::Plugin for Plugin {
             )
             .add_systems(
                 OnEnter(GameState::Playing),
-                (setup_board, setup_stones, setup_ui).chain(),
+                (setup_state, setup_board, setup_stones, setup_ui).chain(),
             )
             .add_systems(
                 FixedUpdate,
-                (
-                    perform_move,
-                    update_labels,
-                    (winner_found, update_menu_button, update_winner),
-                )
-                    // .chain()
+                (perform_move, update_to_sleep, update_labels, winner_found)
                     .run_if(in_state(GameState::Playing)),
             )
-            .add_systems(Update, update_to_sleep)
             .add_systems(
                 OnExit(GameState::Playing),
                 (cleanup::<GameUi>, cleanup::<WinnerUi>),
@@ -83,7 +81,6 @@ pub enum GameState {
 pub struct Side {
     buckets: [Vec<Entity>; HOLE_COUNT],
 
-    #[allow(unused)]
     score: Vec<Entity>,
 }
 
@@ -144,7 +141,7 @@ impl Board {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "")]
     pub fn perform_move(
         &mut self,
         player: usize,
@@ -153,12 +150,19 @@ impl Board {
         turn: &mut ResMut<PlayerTurn>,
         winner_writer: &mut EventWriter<Winner>,
         to_sleep: &mut Option<ResMut<ToSleep>>,
-        commands: &mut Commands,
+        par_commands: &mut ParallelCommands,
     ) {
         let entities = std::mem::take(&mut self.players[player].buckets[hole]);
         let start_player = player;
         let mut index = Index::Player(Player(start_player), Hole(hole));
-        for stone in entities.into_iter() {
+        if let Some(t) = to_sleep.as_mut() {
+            t.reset();
+        }
+        entities.into_iter().for_each(|stone| {
+            par_commands.command_scope(|mut commands| {
+                let mut e = commands.entity(stone);
+                e.remove::<Sleeping>();
+            });
             index = index.next(Player(start_player));
 
             self.get_bucket_mut(index).push(stone);
@@ -168,9 +172,7 @@ impl Board {
             transform.rotation = Quat::from_rotation_x(90.0);
             **linear_velocity = Vector::ZERO;
             **angular_velocity = Vector::ZERO;
-            let mut e = commands.entity(stone);
-            e.remove::<Sleeping>();
-        }
+        });
 
         if !matches!(index, Index::Score(_)) {
             turn.0 = (turn.0 + 1) % 2;
@@ -179,7 +181,7 @@ impl Board {
         if self
             .players
             .iter()
-            .any(|side| side.buckets.iter().all(|bucket| bucket.is_empty()))
+            .any(|side| side.buckets.iter().all(Vec::is_empty))
         {
             let winner = self
                 .players
@@ -189,8 +191,6 @@ impl Board {
                 .unwrap()
                 .0;
             winner_writer.send(Winner(winner));
-        } else {
-            to_sleep.as_mut().map(|t| t.reset());
         }
     }
 }
@@ -256,6 +256,11 @@ impl Default for ToSleep {
     }
 }
 
+pub fn setup_state(mut commands: Commands) {
+    commands.insert_resource(PlayerTurn(1));
+    commands.insert_resource(Selected(None));
+}
+
 pub fn setup_board(
     mut board: ResMut<Board>,
     mut commands: Commands,
@@ -285,7 +290,8 @@ pub fn setup_board(
         for hole in 0..HOLE_COUNT {
             // Invisible material for hole
             let mut bucket_position =
-                Board::bucket_position(Index::Player(Player(player), Hole(hole)));
+                Board::bucket_position(Index::Player(Player(player), Hole(hole)))
+                    + Vec3::new(0.0, 5.0, 0.0);
             bucket_position.y = 0.01;
             let color = match player {
                 0 => Color::linear_rgba(0.0, 0.0, 1.0, 1.0),
@@ -315,13 +321,11 @@ pub fn setup_board(
                     move |over: Trigger<Pointer<Over>>,
                           mut lights: Query<&mut PointLight>,
                           turn: Res<PlayerTurn>,
+                          board: Res<Board>,
                           game_state: Res<State<GameState>>| {
-                        if *game_state != GameState::Playing {
-                            return;
-                        }
                         let entity = over.entity();
                         let mut light = lights.get_mut(entity).unwrap();
-                        if turn.0 != player {
+                        if is_invalid_selection(player, turn, game_state, board, hole) {
                             light.intensity = 0.0;
                             return;
                         }
@@ -374,20 +378,21 @@ pub fn setup_board(
                 0 => Vec3::new(0.0, 0.0, -0.1),
                 _ => Vec3::new(0.0, 0.0, 0.1),
             };
-            let transform =
-                Transform::from_translation(bucket_position + offset + Vec3::new(0.0, 0.05, 0.0))
-                    .with_scale(Vec3::splat(0.001));
+            let transform = Transform::from_translation(
+                bucket_position, // + offset + Vec3::new(0.0, 0.5, 0.0)
+            )
+            .with_scale(Vec3::splat(0.1));
             commands.spawn((
                 Name::from(format!("bucket_label_{player}_{hole}")),
                 GameUi,
                 Player(player),
                 Hole(hole),
-                // Hopefully this will allow billboarding text
-                Text2d::new("4"),
-                TextFont::from_font_size(50.0),
-                TextColor(Color::linear_rgba(1.0, 1.0, 1.0, 1.0)),
+                BillboardText::new("4"),
                 TextLayout::new_with_justify(JustifyText::Center),
-                transform,
+                TextFont::from_font_size(50.0),
+                TextColor(Color::WHITE),
+                // transform,
+                Transform::IDENTITY,
             ));
         }
     }
@@ -420,28 +425,6 @@ pub fn winner_found(
     }
 }
 
-type InteractionsData<'world> = (&'world Interaction, &'world Children);
-
-fn update_menu_button(
-    mut state: ResMut<NextState<GameState>>,
-    interactions: Query<InteractionsData, (With<MainMenuButton>, Changed<Interaction>)>,
-    mut text_query: Query<&mut TextColor>,
-) {
-    for (interaction, children) in interactions.iter() {
-        let mut text_color = text_query.get_mut(children[0]).unwrap();
-        match interaction {
-            Interaction::Pressed => state.set(GameState::Menu),
-            Interaction::Hovered => {
-                **text_color = Color::WHITE;
-            }
-            Interaction::None => {
-                **text_color = Color::Srgba(SLATE_GRAY);
-            }
-        }
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
 pub fn perform_move(
     mut move_events: EventReader<MoveEvent>,
     mut board: ResMut<Board>,
@@ -449,7 +432,7 @@ pub fn perform_move(
     mut turns: ResMut<PlayerTurn>,
     mut winner: EventWriter<Winner>,
     mut to_sleep: Option<ResMut<ToSleep>>,
-    mut commands: Commands,
+    mut par_commands: ParallelCommands,
     mut lights: Query<&mut PointLight>,
 ) {
     for event in move_events.read() {
@@ -462,7 +445,7 @@ pub fn perform_move(
                     &mut turns,
                     &mut winner,
                     &mut to_sleep,
-                    &mut commands,
+                    &mut par_commands,
                 );
                 // Make all the lights go out for now.
                 lights.par_iter_mut().for_each(|mut light| {
@@ -474,18 +457,18 @@ pub fn perform_move(
 }
 
 #[derive(QueryData)]
-#[query_data(mutable, derive(Debug))]
+#[query_data(mutable)]
 pub struct BucketData {
     player: &'static Player,
     hole: &'static Hole,
-    text: &'static mut Text2d,
+    text: &'static mut BillboardText,
 }
 
 #[derive(QueryData)]
 #[query_data(mutable, derive(Debug))]
 pub struct TextData {
     player: &'static Player,
-    text: &'static mut Text2d,
+    text: &'static mut Text,
 }
 
 pub fn update_labels(
@@ -502,7 +485,7 @@ pub fn update_labels(
              mut text,
          }| {
             let count = board.get_bucket(Index::Player(*player, *hole)).len();
-            **text = count.to_string();
+            text.0 = count.to_string();
         },
     );
 
@@ -571,10 +554,10 @@ pub fn setup_stones(
                                 Mass(0.0001),
                                 LinearVelocity(Vec3::ZERO),
                                 AngularVelocity(Vec3::ZERO),
-                                Restitution::new(0.01),
-                                LinearDamping(0.999),
+                                Restitution::new(0.00),
+                                LinearDamping(0.9999),
                                 AngularDamping(100.0),
-                                Friction::new(0.9),
+                                Friction::new(0.99),
                                 Mesh3d(game_assets.stone_mesh.clone()),
                                 MeshMaterial3d(materials.next().expect("cycles")),
                                 Transform::from_translation(position + perturb)
@@ -647,7 +630,7 @@ fn setup_ui(mut commands: Commands) {
                 Turn,
                 Text::new("*"),
                 TextFont::from_font_size(40.0),
-                TextColor(Color::Srgba(LIGHT_CYAN)),
+                TextColor(Color::Srgba(DARK_CYAN)),
                 TextLayout::new_with_justify(JustifyText::Center),
                 Node {
                     justify_self: JustifySelf::Center,
@@ -659,7 +642,7 @@ fn setup_ui(mut commands: Commands) {
                 Score,
                 Text::new("0"),
                 TextFont::from_font_size(40.0),
-                TextColor(Color::Srgba(LIGHT_CYAN)),
+                TextColor(Color::Srgba(DARK_CYAN)),
                 TextLayout::new_with_justify(JustifyText::Right),
                 Node {
                     justify_self: JustifySelf::Center,
@@ -676,6 +659,13 @@ fn setup_ui(mut commands: Commands) {
                     },
                     BackgroundColor(Color::NONE),
                 ))
+                .observe(hover_button)
+                .observe(unhover_button)
+                .observe(
+                    |_click: Trigger<Pointer<Click>>, mut state: ResMut<NextState<GameState>>| {
+                        state.set(GameState::Menu);
+                    },
+                )
                 .with_children(|parent| {
                     parent.spawn((
                         Text::new("Main Menu"),
@@ -717,6 +707,13 @@ fn spawn_win_text(winner: usize, commands: &mut Commands) {
             },
             BackgroundColor(Color::NONE),
         ))
+        .observe(hover_button)
+        .observe(unhover_button)
+        .observe(
+            |_click: Trigger<Pointer<Click>>, mut state: ResMut<NextState<GameState>>| {
+                state.set(GameState::Menu);
+            },
+        )
         .with_children(|parent| {
             parent.spawn((
                 WinnerText,
@@ -732,17 +729,6 @@ fn spawn_win_text(winner: usize, commands: &mut Commands) {
                 },
             ));
         });
-}
-
-fn update_winner(
-    mut state: ResMut<NextState<GameState>>,
-    interactions: Query<&Interaction, (With<WinnerButton>, Changed<Interaction>)>,
-) {
-    for interaction in interactions.iter() {
-        if interaction == &Interaction::Pressed {
-            state.set(GameState::Menu)
-        }
-    }
 }
 
 fn update_to_sleep(

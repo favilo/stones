@@ -84,7 +84,7 @@ fn setup_menu(mut commands: Commands) {
         });
 }
 
-fn hover_button(
+pub fn hover_button(
     trigger: Trigger<Pointer<Over>>,
     children: Query<&Children>,
     mut colors: Query<&mut TextColor>,
@@ -94,7 +94,7 @@ fn hover_button(
     **color = Color::Srgba(GOLD);
 }
 
-fn unhover_button(
+pub fn unhover_button(
     trigger: Trigger<Pointer<Out>>,
     children: Query<&Children>,
     mut colors: Query<&mut TextColor>,

@@ -3,7 +3,7 @@ use bevy::{app, prelude::*};
 pub struct Plugin;
 
 impl app::Plugin for Plugin {
-    fn build(&self, app: &mut bevy::prelude::App) {
+    fn build(&self, app: &mut App) {
         app.add_event::<MoveEvent>();
     }
 }

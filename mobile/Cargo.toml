@@ -2,6 +2,7 @@
 name = "mobile"
 version = "0.1.0"
 edition = "2021"
+description = "Mancala: African Stones for mobile"
 publish = false
 
 [lib]
@@ -27,3 +28,9 @@ target_sdk_version = 31
 # icon = "@mipmap/ic_launcher"
 label = "Mancala: African Stones"
 debuggable = true
+
+[target.aarch64-apple-ios-sim.dependencies]
+bevy = { version = "0.15.1", features = ["ios_simulator"] }
+
+[lints]
+workspace = true

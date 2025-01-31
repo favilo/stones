@@ -1,10 +1,15 @@
+//! The main game module.
+//!
+//! This module contains the main game entry point, as well as the game's main systems.
+
 use avian3d::prelude::*;
 use bevy::{
+    asset::AssetMetaCheck,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     log::LogPlugin,
     prelude::*,
 };
-use bevy_asset_loader::{asset_collection::AssetCollection, loading_state::LoadingStateSet};
+use bevy_asset_loader::loading_state::LoadingStateSet;
 
 use game::GameState;
 use iyes_progress::{ProgressPlugin, ProgressTracker};
@@ -16,31 +21,7 @@ mod game;
 mod graphics;
 mod ui;
 
-#[derive(AssetCollection, Resource)]
-struct GameAssets {
-    #[asset(key = "board_scene")]
-    board_scene: Handle<Scene>,
-
-    // #[asset(key = "board_collider")]
-    // board_collider: Handle<Scene>,
-
-    // #[asset(key = "board_textures", collection(typed, mapped))]
-    // #[asset(image(sampler(filter = nearest)))]
-    // board_textures: HashMap<String, Handle<Image>>,
-    //
-    #[asset(key = "stone_mesh")]
-    stone_mesh: Handle<Mesh>,
-
-    #[asset(key = "stone_materials", collection(typed))]
-    stone_materials: Vec<Handle<StandardMaterial>>,
-
-    #[asset(key = "stone_collider")]
-    stone_collider: Handle<Mesh>,
-    //
-    // #[asset(key = "stone_scene")]
-    // stone_scenes: Handle<Scene>,
-}
-
+/// The Game Plugin that loads all the other bevy plugins.
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
@@ -54,7 +35,11 @@ impl Plugin for GamePlugin {
         ));
         #[cfg(not(target_os = "android"))]
         {
-            app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new())
+            app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new()
+                .run_if(|config_store: Res<GizmoConfigStore>| -> bool{
+                let (config, _) = config_store.config::<PhysicsGizmos>();
+                config.enabled
+            }))
             // .add_plugins(BlenvyPlugin::default())
             ;
         }
@@ -94,6 +79,7 @@ impl Plugin for GamePlugin {
     }
 }
 
+/// The main entry point for the game.
 pub fn run() {
     App::new()
         .add_plugins(
@@ -109,28 +95,15 @@ pub fn run() {
                         ..Default::default()
                     }),
                     ..Default::default()
+                })
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
+                    ..Default::default()
                 }),
         )
         .add_plugins(GamePlugin)
         .run();
 }
-
-// fn save_collider_to_file(keys: Res<ButtonInput<KeyCode>>, colliders: Query<(&Name, &Collider)>) {
-//     if !keys.just_pressed(KeyCode::KeyS) {
-//         return;
-//     }
-
-//     for (name, collider) in colliders.iter() {
-//         // Save the collider to a file
-//         let path = PathBuf::from("assets")
-//             .join("colliders")
-//             .join(format!("{}.msp", name.as_str()));
-//         tracing::info!("Saving collider to file: {}", path.display());
-//         let mut file = std::fs::File::create(path).unwrap();
-//         let packed = rmp_serde::to_vec(&collider).unwrap();
-//         file.write_all(&packed).unwrap();
-//     }
-// }
 
 fn toggle_debug(keys: Res<ButtonInput<KeyCode>>, mut config_store: ResMut<GizmoConfigStore>) {
     if !keys.just_pressed(KeyCode::KeyD) {
@@ -160,6 +133,7 @@ fn print_progress(
     }
 }
 
+/// Cleans up the given entities Usually used to remove enditites from a specific `GameState`.
 pub fn cleanup<T: Component>(mut commands: Commands, entities: Query<Entity, With<T>>) {
     entities.iter().for_each(|entity| {
         commands.entity(entity).despawn_recursive();

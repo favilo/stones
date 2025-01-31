@@ -1,3 +1,6 @@
+//! This is defines the `main` function for the mobile builds of `stones`
+//!
+//! Uses `bevy_main` to set the correct stuff
 use bevy::{
     log::{Level, LogPlugin},
     prelude::*,
@@ -30,6 +33,3 @@ fn main() {
     // app.insert_resource(Msaa::Off);
     app.run();
 }
-
-#[cfg_attr(target_os = "android", link(name = "c++_shared"))]
-extern "C" {}

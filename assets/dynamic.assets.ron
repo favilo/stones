@@ -1,6 +1,6 @@
 ({
     "board_scene": File (
-        path: "scenes/Board.glb#Scene0",
+        path: "scenes/board.glb#Scene0",
     ),
     "board_collider": File (
         path: "colliders/board.obj",
