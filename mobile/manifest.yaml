@@ -13,7 +13,7 @@ android:
     package: "org.favil.stones"
     version_code: 6
     sdk:
-      target_sdk_version: 33
+      target_sdk_version: 34
       min_sdk_version: 31
     application:
       has_code: false

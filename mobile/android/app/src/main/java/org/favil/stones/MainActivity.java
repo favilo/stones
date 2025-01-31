@@ -1,4 +1,4 @@
-package org.bevyengine.example;
+package org.favil.stones;
 
 import android.view.View;
 import com.google.androidgamesdk.GameActivity;

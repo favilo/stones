@@ -1,5 +1,6 @@
 /target
 /mobile/android/app/build
+/mobile/android/app/.cxx
 **/.gradle/
 /dist
 **/*.so

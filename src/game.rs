@@ -2,7 +2,7 @@ use avian3d::{math::Vector, prelude::*};
 use bevy::{
     app,
     color::palettes::css::{DARK_CYAN, GREEN, LIGHT_CYAN, SLATE_GRAY},
-    ecs::query::QueryData,
+    ecs::{query::QueryData, system::SystemId},
     prelude::*,
     ui::FocusPolicy,
 };
@@ -33,6 +33,9 @@ pub(crate) enum GameLayer {
     MouseObject,
 }
 
+#[derive(Resource, Debug, PartialEq, Eq, Clone, Deref)]
+pub(crate) struct UpdateLabels(SystemId);
+
 impl app::Plugin for Plugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Board::default())
@@ -55,13 +58,14 @@ impl app::Plugin for Plugin {
             )
             .add_systems(
                 FixedUpdate,
-                (perform_move, update_to_sleep, update_labels, winner_found)
-                    .run_if(in_state(GameState::Playing)),
+                (perform_move, update_to_sleep, winner_found).run_if(in_state(GameState::Playing)),
             )
             .add_systems(
                 OnExit(GameState::Playing),
                 (cleanup::<GameUi>, cleanup::<WinnerUi>),
             );
+        let update_label_system = app.register_system(update_labels);
+        app.insert_resource(UpdateLabels(update_label_system));
     }
 }
 
@@ -432,6 +436,8 @@ pub fn perform_move(
     mut to_sleep: Option<ResMut<ToSleep>>,
     mut par_commands: ParallelCommands,
     mut lights: Query<&mut PointLight>,
+    update_labels: Res<UpdateLabels>,
+    mut commands: Commands,
 ) {
     for event in move_events.read() {
         match *event {
@@ -452,6 +458,7 @@ pub fn perform_move(
             }
         }
     }
+    commands.run_system(**update_labels);
 }
 
 #[derive(QueryData)]
