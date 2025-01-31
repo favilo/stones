@@ -378,10 +378,8 @@ pub fn setup_board(
                 0 => Vec3::new(0.0, 0.0, -0.1),
                 _ => Vec3::new(0.0, 0.0, 0.1),
             };
-            let transform = Transform::from_translation(
-                bucket_position, // + offset + Vec3::new(0.0, 0.5, 0.0)
-            )
-            .with_scale(Vec3::splat(0.1));
+            let transform = Transform::from_translation(bucket_position + offset)
+                .with_scale(Vec3::splat(0.001));
             commands.spawn((
                 Name::from(format!("bucket_label_{player}_{hole}")),
                 GameUi,
@@ -389,10 +387,9 @@ pub fn setup_board(
                 Hole(hole),
                 BillboardText::new("4"),
                 TextLayout::new_with_justify(JustifyText::Center),
-                TextFont::from_font(game_assets.main_font.clone()).with_font_size(50.0),
+                TextFont::from_font(game_assets.main_font.clone()).with_font_size(30.0),
                 TextColor(Color::WHITE),
-                // transform,
-                Transform::IDENTITY,
+                transform,
             ));
         }
     }

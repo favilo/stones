@@ -11,6 +11,7 @@ use bevy::{
 };
 use bevy_asset_loader::loading_state::LoadingStateSet;
 
+use bevy_mod_billboard::plugin::BillboardPlugin;
 use game::GameState;
 use iyes_progress::{ProgressPlugin, ProgressTracker};
 use tracing::Level;
@@ -31,7 +32,7 @@ impl Plugin for GamePlugin {
             ProgressPlugin::<GameState>::new()
                 .with_state_transition(GameState::Loading, GameState::Menu),
             // ObjPlugin,
-            // BillboardPlugin,
+            BillboardPlugin,
         ));
         #[cfg(not(target_os = "android"))]
         {
