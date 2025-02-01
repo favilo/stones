@@ -4,22 +4,19 @@
 
 use avian3d::prelude::*;
 use bevy::{
-    asset::AssetMetaCheck,
-    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
-    log::LogPlugin,
-    prelude::*,
+    asset::AssetMetaCheck, diagnostic::FrameTimeDiagnosticsPlugin, log::LogPlugin, prelude::*,
 };
-use bevy_asset_loader::loading_state::LoadingStateSet;
 
 use bevy_mod_billboard::plugin::BillboardPlugin;
 use game::GameState;
-use iyes_progress::{ProgressPlugin, ProgressTracker};
+use iyes_progress::ProgressPlugin;
 use tracing::Level;
 
 mod assets;
 mod events;
 mod game;
 mod graphics;
+mod loading;
 mod ui;
 
 /// The Game Plugin that loads all the other bevy plugins.
@@ -27,13 +24,14 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
-            FrameTimeDiagnosticsPlugin,
-            ProgressPlugin::<GameState>::new()
-                .with_state_transition(GameState::Loading, GameState::Menu),
-            // ObjPlugin,
-            BillboardPlugin,
-        ));
+        app.enable_state_scoped_entities::<GameState>()
+            .add_plugins((
+                FrameTimeDiagnosticsPlugin,
+                ProgressPlugin::<GameState>::new()
+                    .with_state_transition(GameState::Loading, GameState::Menu),
+                // ObjPlugin,
+                BillboardPlugin,
+            ));
         #[cfg(not(target_os = "android"))]
         {
             app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new()
@@ -68,14 +66,20 @@ impl Plugin for GamePlugin {
                 ..Default::default()
             },
         )
-        .add_plugins((assets::Plugin, events::Plugin, game::Plugin, ui::Plugin))
+        .add_plugins((
+            loading::Plugin,
+            assets::Plugin,
+            events::Plugin,
+            game::Plugin,
+            ui::Plugin,
+        ))
         // .add_systems(OnEnter(GameState::Loading), setup_colliders)
-        .add_systems(
-            FixedUpdate,
-            (print_progress,)
-                .run_if(in_state(GameState::Loading))
-                .after(LoadingStateSet(GameState::Loading)),
-        )
+        // .add_systems(
+        //     Update,
+        //     show_progress
+        //         .run_if(in_state(GameState::Loading))
+        //         .after(LoadingStateSet(GameState::Loading)),
+        // )
         .add_systems(FixedUpdate, toggle_debug);
     }
 }
@@ -112,31 +116,4 @@ fn toggle_debug(keys: Res<ButtonInput<KeyCode>>, mut config_store: ResMut<GizmoC
     }
     let (config, _) = config_store.config_mut::<PhysicsGizmos>();
     config.enabled = !config.enabled;
-}
-
-fn print_progress(
-    progress: Option<Res<ProgressTracker<GameState>>>,
-    diagnostics: Res<DiagnosticsStore>,
-    mut last_done: Local<u32>,
-) {
-    if let Some(progress) = progress.map(|counter| counter.get_global_progress()) {
-        if progress.done > *last_done {
-            *last_done = progress.done;
-            info!(
-                "[Frame {}] Changed progress: {:?}",
-                diagnostics
-                    .get(&FrameTimeDiagnosticsPlugin::FRAME_COUNT)
-                    .map(|diagnostic| diagnostic.value().unwrap_or(0.))
-                    .unwrap_or(0.),
-                progress
-            );
-        }
-    }
-}
-
-/// Cleans up the given entities Usually used to remove enditites from a specific `GameState`.
-pub fn cleanup<T: Component>(mut commands: Commands, entities: Query<Entity, With<T>>) {
-    entities.iter().for_each(|entity| {
-        commands.entity(entity).despawn_recursive();
-    });
 }

@@ -1,7 +1,7 @@
 use avian3d::{math::Vector, prelude::*};
 use bevy::{
     app,
-    color::palettes::css::{DARK_CYAN, GREEN, LIGHT_CYAN, SLATE_GRAY},
+    color::palettes::css::{DARK_CYAN, GOLD, GREEN, LIGHT_CYAN, SLATE_GRAY},
     ecs::{query::QueryData, system::SystemId},
     prelude::*,
     ui::FocusPolicy,
@@ -14,7 +14,6 @@ use bevy_mod_billboard::BillboardText;
 
 use crate::{
     assets::GameAssets,
-    cleanup,
     events::MoveEvent,
     ui::{hover_button, unhover_button},
 };
@@ -50,7 +49,6 @@ impl app::Plugin for Plugin {
                         "dynamic.assets.ron",
                     )
                     .load_collection::<GameAssets>(),
-                // .init_resource::<BoardCollider>(),
             )
             .add_systems(
                 OnEnter(GameState::Playing),
@@ -58,12 +56,10 @@ impl app::Plugin for Plugin {
             )
             .add_systems(
                 FixedUpdate,
-                (perform_move, update_to_sleep, winner_found).run_if(in_state(GameState::Playing)),
+                update_to_sleep.run_if(in_state(GameState::Playing)),
             )
-            .add_systems(
-                OnExit(GameState::Playing),
-                (cleanup::<GameUi>, cleanup::<WinnerUi>),
-            );
+            .add_observer(winner_found)
+            .add_observer(perform_move);
         let update_label_system = app.register_system(update_labels);
         app.insert_resource(UpdateLabels(update_label_system));
     }
@@ -85,7 +81,7 @@ pub enum GameState {
 pub struct Side {
     buckets: [Vec<Entity>; HOLE_COUNT],
 
-    score: Vec<Entity>,
+    home: Vec<Entity>,
 }
 
 #[derive(Debug, Default, Resource)]
@@ -134,14 +130,14 @@ impl Board {
     pub fn get_bucket(&self, index: Index) -> &[Entity] {
         match index {
             Index::Player(Player(p), Hole(h)) => &self.players[p].buckets[h],
-            Index::Score(Player(p)) => &self.players[p].score,
+            Index::Score(Player(p)) => &self.players[p].home,
         }
     }
 
     pub fn get_bucket_mut(&mut self, index: Index) -> &mut Vec<Entity> {
         match index {
             Index::Player(Player(p), Hole(h)) => &mut self.players[p].buckets[h],
-            Index::Score(Player(p)) => &mut self.players[p].score,
+            Index::Score(Player(p)) => &mut self.players[p].home,
         }
     }
 
@@ -152,9 +148,8 @@ impl Board {
         hole: usize,
         query: &mut Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
         turn: &mut ResMut<PlayerTurn>,
-        winner_writer: &mut EventWriter<Winner>,
         to_sleep: &mut Option<ResMut<ToSleep>>,
-        par_commands: &mut ParallelCommands,
+        commands: &mut Commands,
     ) {
         let entities = std::mem::take(&mut self.players[player].buckets[hole]);
         let start_player = player;
@@ -163,10 +158,8 @@ impl Board {
             t.reset();
         }
         entities.into_iter().for_each(|stone| {
-            par_commands.command_scope(|mut commands| {
-                let mut e = commands.entity(stone);
-                e.remove::<Sleeping>();
-            });
+            let mut e = commands.entity(stone);
+            e.remove::<Sleeping>();
             index = index.next(Player(start_player));
 
             self.get_bucket_mut(index).push(stone);
@@ -191,10 +184,10 @@ impl Board {
                 .players
                 .iter()
                 .enumerate()
-                .max_by_key(|(_, side)| side.score.len())
+                .max_by_key(|(_, side)| side.home.len())
                 .unwrap()
                 .0;
-            winner_writer.send(Winner(winner));
+            commands.trigger(Winner(winner));
         }
     }
 }
@@ -265,16 +258,9 @@ pub fn setup_state(mut commands: Commands) {
     commands.insert_resource(Selected(None));
 }
 
-pub fn setup_board(
-    mut board: ResMut<Board>,
-    mut commands: Commands,
-    game_assets: Res<GameAssets>,
-    // board_collider: Res<BoardCollider>,
-) {
+pub fn setup_board(mut board: ResMut<Board>, mut commands: Commands, game_assets: Res<GameAssets>) {
     *board = Board::default();
 
-    // let board_mesh = meshes.get(&game_assets.board_collider).unwrap();
-    // let collider = board_collider.0.clone();
     let collider = ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh);
 
     commands.spawn((
@@ -283,12 +269,11 @@ pub fn setup_board(
         collider,
         CollisionMargin(0.005),
         CollisionLayers::new(GameLayer::PhysicsObject, GameLayer::PhysicsObject),
-        Friction::new(1.0),
+        Restitution::new(0.0),
         Name::from("Board"),
         SceneRoot::from(game_assets.board_scene.clone()),
+        StateScoped(GameState::Playing),
     ));
-
-    // let mesh = meshes.add(Sphere { radius: 0.03 }.mesh().ico(3).unwrap());
 
     for player in 0..PLAYER_COUNT {
         for hole in 0..HOLE_COUNT {
@@ -315,11 +300,11 @@ pub fn setup_board(
                         ..Default::default()
                     },
                     Transform::from_translation(bucket_position),
-                    // Mesh3d(mesh.clone()),
                     Collider::sphere(0.03),
                     CollisionLayers::new(GameLayer::MouseObject, GameLayer::MouseObject),
                     Sensor,
                     PhysicsPickable,
+                    StateScoped(GameState::Playing),
                 ))
                 .observe(
                     move |over: Trigger<Pointer<Over>>,
@@ -361,8 +346,8 @@ pub fn setup_board(
                           mut selected: ResMut<Selected>,
                           turn: Res<PlayerTurn>,
                           board: Res<Board>,
-                          mut move_events: EventWriter<MoveEvent>,
-                          game_state: Res<State<GameState>>| {
+                          game_state: Res<State<GameState>>,
+                          mut commands: Commands| {
                         if is_invalid_selection(player, turn, game_state, board, hole) {
                             return;
                         }
@@ -373,7 +358,7 @@ pub fn setup_board(
                         if selected.0.unwrap() != Index::Player(Player(player), Hole(hole)) {
                             return;
                         }
-                        move_events.send(MoveEvent::HoleClicked(player, hole));
+                        commands.trigger(MoveEvent::HoleClicked(player, hole));
                         selected.0 = None;
                     },
                 );
@@ -394,6 +379,7 @@ pub fn setup_board(
                 TextFont::from_font(game_assets.main_font.clone()).with_font_size(30.0),
                 TextColor(Color::WHITE),
                 transform,
+                StateScoped(GameState::Playing),
             ));
         }
     }
@@ -414,48 +400,43 @@ fn is_invalid_selection(
 }
 
 pub fn winner_found(
-    mut winner: EventReader<Winner>,
+    trigger: Trigger<Winner>,
     mut lights: Query<&mut PointLight>,
     mut commands: Commands,
     game_assets: Res<GameAssets>,
 ) {
-    if let Some(Winner(winner)) = winner.read().next() {
-        for mut light in lights.iter_mut() {
-            light.intensity = 0.0;
-        }
-        spawn_win_text(*winner, &mut commands, &game_assets);
+    let Winner(winner) = *trigger;
+    for mut light in lights.iter_mut() {
+        light.intensity = 0.0;
     }
+    spawn_win_text(winner, &mut commands, &game_assets);
 }
 
 pub fn perform_move(
-    mut move_events: EventReader<MoveEvent>,
+    move_event: Trigger<MoveEvent>,
     mut board: ResMut<Board>,
     mut transforms: Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
     mut turns: ResMut<PlayerTurn>,
-    mut winner: EventWriter<Winner>,
     mut to_sleep: Option<ResMut<ToSleep>>,
-    mut par_commands: ParallelCommands,
     mut lights: Query<&mut PointLight>,
     update_labels: Res<UpdateLabels>,
     mut commands: Commands,
 ) {
-    for event in move_events.read() {
-        match *event {
-            MoveEvent::HoleClicked(player, hole) => {
-                board.perform_move(
-                    player,
-                    hole,
-                    &mut transforms,
-                    &mut turns,
-                    &mut winner,
-                    &mut to_sleep,
-                    &mut par_commands,
-                );
-                // Make all the lights go out for now.
-                lights.par_iter_mut().for_each(|mut light| {
-                    light.intensity = 0.0;
-                });
-            }
+    let event = *move_event;
+    match event {
+        MoveEvent::HoleClicked(player, hole) => {
+            board.perform_move(
+                player,
+                hole,
+                &mut transforms,
+                &mut turns,
+                &mut to_sleep,
+                &mut commands,
+            );
+            // Make all the lights go out for now.
+            lights.par_iter_mut().for_each(|mut light| {
+                light.intensity = 0.0;
+            });
         }
     }
     commands.run_system(**update_labels);
@@ -529,7 +510,6 @@ pub fn setup_stones(
     tracing::info!("Spawning stones");
     for player in 0..PLAYER_COUNT {
         for hole in 0..HOLE_COUNT {
-            // let hole = 0;
             for i in 0..STARTING_PIECES {
                 let position = Board::bucket_position(Index::Player(Player(player), Hole(hole)));
                 let perturb = Vec3::new(
@@ -537,7 +517,6 @@ pub fn setup_stones(
                     i as f32 * BALL_RADIUS,
                     (i as f32 * 0.001).cos() * 0.0025,
                 );
-                // let perturb = Vec3::new(0.0, i as f32 * 0.1, 0.0);
 
                 board.players[player].buckets[hole].push(
                     commands
@@ -552,7 +531,6 @@ pub fn setup_stones(
                                 GameLayer::PhysicsObject,
                                 GameLayer::PhysicsObject,
                             ),
-                            // ToSleep::default(),
                             // Physics
                             (
                                 GravityScale(0.25),
@@ -562,7 +540,6 @@ pub fn setup_stones(
                                 Restitution::new(0.00),
                                 LinearDamping(0.9999),
                                 AngularDamping(100.0),
-                                Friction::new(0.99),
                                 Mesh3d(game_assets.stone_mesh.clone()),
                                 MeshMaterial3d(materials.next().expect("cycles")),
                                 Transform::from_translation(position + perturb)
@@ -570,8 +547,8 @@ pub fn setup_stones(
                                     .with_scale(Vec3::splat(SCALE)),
                                 SpeculativeMargin(0.005),
                                 // Maybe we'll turn this back on, but speculative is doing great.
-                                // SweptCcd::default(),
                             ),
+                            StateScoped(GameState::Playing),
                         ))
                         .id(),
                 );
@@ -594,6 +571,7 @@ fn setup_ui(mut commands: Commands, game_assets: Res<GameAssets>) {
                 justify_content: JustifyContent::SpaceAround,
                 ..Default::default()
             },
+            StateScoped(GameState::Playing),
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -664,8 +642,8 @@ fn setup_ui(mut commands: Commands, game_assets: Res<GameAssets>) {
                     },
                     BackgroundColor(Color::NONE),
                 ))
-                .observe(hover_button)
-                .observe(unhover_button)
+                .observe(hover_button(Color::Srgba(GOLD)))
+                .observe(unhover_button(Color::Srgba(SLATE_GRAY)))
                 .observe(
                     |_click: Trigger<Pointer<Click>>, mut state: ResMut<NextState<GameState>>| {
                         state.set(GameState::Menu);
@@ -693,7 +671,7 @@ struct MainMenuButton;
 fn spawn_win_text(winner: usize, commands: &mut Commands, game_assets: &Res<GameAssets>) {
     assert!(winner < 2, "Invalid winner index");
 
-    const WIN_COLOR: [&str; 2] = ["Blue", "Green"];
+    const WINNER_NAMES: [&str; 2] = ["Blue", "Green"];
     const COLORS: [Color; 2] = [Color::Srgba(LIGHT_CYAN), Color::Srgba(GREEN)];
     commands
         .spawn((
@@ -711,9 +689,8 @@ fn spawn_win_text(winner: usize, commands: &mut Commands, game_assets: &Res<Game
                 ..Default::default()
             },
             BackgroundColor(Color::NONE),
+            StateScoped(GameState::Playing),
         ))
-        .observe(hover_button)
-        .observe(unhover_button)
         .observe(
             |_click: Trigger<Pointer<Click>>, mut state: ResMut<NextState<GameState>>| {
                 state.set(GameState::Menu);
@@ -722,7 +699,7 @@ fn spawn_win_text(winner: usize, commands: &mut Commands, game_assets: &Res<Game
         .with_children(|parent| {
             parent.spawn((
                 WinnerText,
-                Text::new(format!("Player {} Wins!", WIN_COLOR[winner])),
+                Text::new(format!("{} Player Wins!", WINNER_NAMES[winner])),
                 TextFont::from_font(game_assets.main_font.clone()).with_font_size(50.0),
                 TextColor(COLORS[winner]),
                 TextLayout::new_with_justify(JustifyText::Center),

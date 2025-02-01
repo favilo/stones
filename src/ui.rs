@@ -4,17 +4,13 @@ use bevy::{
     prelude::*,
 };
 
-use crate::{assets::GameAssets, cleanup, game::GameState, graphics::setup_graphics};
+use crate::{assets::GameAssets, game::GameState};
 
 pub struct Plugin;
 
 impl app::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(GameState::Menu),
-            (setup_graphics, setup_menu).chain(),
-        )
-        .add_systems(OnExit(GameState::Menu), cleanup::<Menu>);
+        app.add_systems(OnEnter(GameState::Menu), setup_menu);
     }
 }
 
@@ -41,6 +37,7 @@ fn setup_menu(mut commands: Commands, game_assets: Res<GameAssets>) {
             },
             BackgroundColor(Color::linear_rgba(0.0, 0.0, 0.0, 1.0)),
             Menu,
+            StateScoped(GameState::Menu),
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -50,8 +47,8 @@ fn setup_menu(mut commands: Commands, game_assets: Res<GameAssets>) {
             ));
             parent
                 .spawn((StartButton, Button, BackgroundColor(Color::NONE)))
-                .observe(hover_button)
-                .observe(unhover_button)
+                .observe(hover_button(Color::Srgba(GOLD)))
+                .observe(unhover_button(Color::WHITE))
                 .observe(
                     |_trigger: Trigger<Pointer<Click>>,
                      mut next_state: ResMut<NextState<GameState>>| {
@@ -67,8 +64,8 @@ fn setup_menu(mut commands: Commands, game_assets: Res<GameAssets>) {
                 });
             parent
                 .spawn((QuitButton, Button, BackgroundColor(Color::NONE)))
-                .observe(hover_button)
-                .observe(unhover_button)
+                .observe(hover_button(Color::WHITE))
+                .observe(unhover_button(Color::WHITE))
                 .observe(
                     |_click: Trigger<Pointer<Click>>, mut exit: EventWriter<AppExit>| {
                         exit.send(AppExit::Success);
@@ -85,21 +82,25 @@ fn setup_menu(mut commands: Commands, game_assets: Res<GameAssets>) {
 }
 
 pub fn hover_button(
-    trigger: Trigger<Pointer<Over>>,
-    children: Query<&Children>,
-    mut colors: Query<&mut TextColor>,
-) {
-    let children = children.get(trigger.entity()).unwrap();
-    let mut color = colors.get_mut(children[0]).unwrap();
-    **color = Color::Srgba(GOLD);
+    new_color: Color,
+) -> impl FnMut(Trigger<Pointer<Over>>, Query<&Children>, Query<&mut TextColor>) {
+    move |trigger: Trigger<Pointer<Over>>,
+          children: Query<&Children>,
+          mut colors: Query<&mut TextColor>| {
+        let children = children.get(trigger.entity()).unwrap();
+        let mut color = colors.get_mut(children[0]).unwrap();
+        **color = new_color;
+    }
 }
 
 pub fn unhover_button(
-    trigger: Trigger<Pointer<Out>>,
-    children: Query<&Children>,
-    mut colors: Query<&mut TextColor>,
-) {
-    let children = children.get(trigger.entity()).unwrap();
-    let mut color = colors.get_mut(children[0]).unwrap();
-    **color = Color::WHITE;
+    new_color: Color,
+) -> impl FnMut(Trigger<Pointer<Out>>, Query<&Children>, Query<&mut TextColor>) {
+    move |trigger: Trigger<Pointer<Out>>,
+          children: Query<&Children>,
+          mut colors: Query<&mut TextColor>| {
+        let children = children.get(trigger.entity()).unwrap();
+        let mut color = colors.get_mut(children[0]).unwrap();
+        **color = new_color;
+    }
 }
