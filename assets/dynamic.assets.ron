@@ -2,9 +2,6 @@
     "board_scene": File (
         path: "scenes/board.glb#Scene0",
     ),
-    "board_collider": File (
-        path: "colliders/board.obj",
-    ),
     "stone_gltf": File (
         path: "scenes/stone.glb",
     ),
@@ -17,9 +14,6 @@
             "scenes/stone.glb#Material1",
             "scenes/stone.glb#Material2",
         ],
-    ),
-    "stone_collider": File (
-        path: "scenes/stone_physics.glb#Mesh0/Primitive0",
     ),
     "main_font": File (
         path: "fonts/AfrikaTUbuntu-nAOV.ttf",

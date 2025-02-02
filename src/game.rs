@@ -358,7 +358,7 @@ pub fn setup_stones(
 
     let mut materials = game_assets.stone_materials.iter().cycle().cloned();
 
-    let mesh = meshes.get(&game_assets.stone_collider).unwrap();
+    let mesh = meshes.get(&game_assets.stone_mesh).unwrap();
     let collider = Collider::convex_hull_from_mesh(mesh).unwrap();
 
     tracing::info!("Spawning stones");

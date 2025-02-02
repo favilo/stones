@@ -14,24 +14,12 @@ pub struct GameAssets {
     #[asset(key = "board_scene")]
     pub board_scene: Handle<Scene>,
 
-    // #[asset(key = "board_collider")]
-    // pub board_collider: Handle<Scene>,
-
-    // #[asset(key = "board_textures", collection(typed, mapped))]
-    // #[asset(image(sampler(filter = nearest)))]
-    // pub board_textures: HashMap<String, Handle<Image>>,
-    //
     #[asset(key = "stone_mesh")]
     pub stone_mesh: Handle<Mesh>,
 
     #[asset(key = "stone_materials", collection(typed))]
     pub stone_materials: Vec<Handle<StandardMaterial>>,
 
-    #[asset(key = "stone_collider")]
-    pub stone_collider: Handle<Mesh>,
-    //
-    // #[asset(key = "stone_scene")]
-    // pub stone_scenes: Handle<Scene>,
     #[asset(key = "main_font")]
     pub main_font: Handle<Font>,
 }
