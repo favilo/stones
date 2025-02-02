@@ -64,7 +64,7 @@ fn setup_menu(mut commands: Commands, game_assets: Res<GameAssets>) {
                 });
             parent
                 .spawn((QuitButton, Button, BackgroundColor(Color::NONE)))
-                .observe(hover_button(Color::WHITE))
+                .observe(hover_button(Color::Srgba(GOLD)))
                 .observe(unhover_button(Color::WHITE))
                 .observe(
                     |_click: Trigger<Pointer<Click>>, mut exit: EventWriter<AppExit>| {
