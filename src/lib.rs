@@ -1,6 +1,7 @@
 //! The main game module.
 //!
 //! This module contains the main game entry point, as well as the game's main systems.
+#![feature(trivial_bounds)]
 
 use avian3d::prelude::*;
 use bevy::{
@@ -13,12 +14,17 @@ use game::GameState;
 use iyes_progress::ProgressPlugin;
 use tracing::Level;
 
-mod assets;
-mod events;
-mod game;
-mod graphics;
-mod loading;
-mod ui;
+pub(crate) mod assets;
+pub(crate) mod events;
+pub(crate) mod game;
+pub(crate) mod graphics;
+pub(crate) mod loading;
+pub(crate) mod physics;
+pub(crate) mod rules;
+pub(crate) mod ui;
+
+/// The number of players in the game.
+pub const PLAYER_COUNT: usize = 2;
 
 /// The Game Plugin that loads all the other bevy plugins.
 pub struct GamePlugin;

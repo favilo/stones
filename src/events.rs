@@ -1,5 +1,7 @@
 use bevy::{app, prelude::*};
 
+use crate::rules::variants::Index;
+
 pub struct Plugin;
 
 impl app::Plugin for Plugin {
@@ -10,5 +12,5 @@ impl app::Plugin for Plugin {
 
 #[derive(Debug, Event, Clone, Copy)]
 pub enum MoveEvent {
-    HoleClicked(usize, usize),
+    HoleClicked(Index),
 }

@@ -1,4 +1,6 @@
-use avian3d::{math::Vector, prelude::*};
+use std::hash::Hash;
+
+use avian3d::prelude::*;
 use bevy::{
     app,
     color::palettes::css::{DARK_CYAN, GOLD, GREEN, LIGHT_CYAN, SLATE_GRAY},
@@ -15,29 +17,21 @@ use bevy_mod_billboard::BillboardText;
 use crate::{
     assets::GameAssets,
     events::MoveEvent,
+    physics::GameLayer,
+    rules::variants::{ChosenVariant, Index, Variant},
     ui::{hover_button, unhover_button},
+    PLAYER_COUNT,
 };
 
-pub const PLAYER_COUNT: usize = 2;
-pub const HOLE_COUNT: usize = 6;
-pub const STARTING_PIECES: usize = 4;
-
 pub struct Plugin;
-
-#[derive(PhysicsLayer, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub(crate) enum GameLayer {
-    #[default]
-    Default,
-    PhysicsObject,
-    MouseObject,
-}
 
 #[derive(Resource, Debug, PartialEq, Eq, Clone, Deref)]
 pub(crate) struct UpdateLabels(SystemId);
 
 impl app::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Board::default())
+        app.insert_resource(ChosenVariant::default())
+            .insert_resource(Board(ChosenVariant::default().to_variant()))
             .register_type::<Player>()
             .register_type::<Hole>()
             .init_state::<GameState>()
@@ -65,9 +59,6 @@ impl app::Plugin for Plugin {
     }
 }
 
-#[derive(Debug, Default, Component, Copy, Clone)]
-pub struct GameUi;
-
 #[derive(Default, Debug, Clone, Copy, States, Hash, PartialEq, Eq)]
 pub enum GameState {
     #[default]
@@ -77,150 +68,10 @@ pub enum GameState {
     Playing,
 }
 
-#[derive(Debug, Default)]
-pub struct Side {
-    buckets: [Vec<Entity>; HOLE_COUNT],
-
-    home: Vec<Entity>,
-}
-
-#[derive(Debug, Default, Resource)]
-pub struct Board {
-    players: [Side; PLAYER_COUNT],
-}
-
-impl Board {
-    const HOLE_DROP_POSITIONS: [[Vec3; HOLE_COUNT]; PLAYER_COUNT] = [
-        // Top Row
-        [
-            Vec3::new(-0.215, 0.075, -0.035),
-            Vec3::new(-0.130, 0.075, -0.035),
-            Vec3::new(-0.040, 0.075, -0.035),
-            Vec3::new(00.042, 0.075, -0.035),
-            Vec3::new(00.130, 0.075, -0.035),
-            Vec3::new(00.215, 0.075, -0.035),
-        ],
-        // Bottom Row
-        [
-            Vec3::new(00.215, 0.075, 0.035),
-            Vec3::new(00.130, 0.075, 0.035),
-            Vec3::new(00.042, 0.075, 0.035),
-            Vec3::new(-0.040, 0.075, 0.035),
-            Vec3::new(-0.130, 0.075, 0.035),
-            Vec3::new(-0.215, 0.075, 0.035),
-        ],
-    ];
-    const BUCKET_POSITIONS: [Vec3; PLAYER_COUNT] =
-        [Vec3::new(0.276, 0.075, 0.0), Vec3::new(-0.276, 0.075, 0.0)];
-
-    pub fn bucket_position(index: Index) -> Vec3 {
-        match index {
-            Index::Player(Player(p), Hole(h)) => {
-                assert!(p < PLAYER_COUNT, "Invalid player index");
-                assert!(h < HOLE_COUNT, "Invalid hole index");
-                Self::HOLE_DROP_POSITIONS[p][h]
-            }
-            Index::Score(Player(p)) => {
-                assert!(p < PLAYER_COUNT, "Invalid player index");
-                Self::BUCKET_POSITIONS[p]
-            }
-        }
-    }
-
-    pub fn get_bucket(&self, index: Index) -> &[Entity] {
-        match index {
-            Index::Player(Player(p), Hole(h)) => &self.players[p].buckets[h],
-            Index::Score(Player(p)) => &self.players[p].home,
-        }
-    }
-
-    pub fn get_bucket_mut(&mut self, index: Index) -> &mut Vec<Entity> {
-        match index {
-            Index::Player(Player(p), Hole(h)) => &mut self.players[p].buckets[h],
-            Index::Score(Player(p)) => &mut self.players[p].home,
-        }
-    }
-
-    #[expect(clippy::too_many_arguments, reason = "")]
-    pub fn perform_move(
-        &mut self,
-        player: usize,
-        hole: usize,
-        query: &mut Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
-        turn: &mut ResMut<PlayerTurn>,
-        to_sleep: &mut Option<ResMut<ToSleep>>,
-        commands: &mut Commands,
-    ) {
-        let entities = std::mem::take(&mut self.players[player].buckets[hole]);
-        let start_player = player;
-        let mut index = Index::Player(Player(start_player), Hole(hole));
-        if let Some(t) = to_sleep.as_mut() {
-            t.reset();
-        }
-        entities.into_iter().for_each(|stone| {
-            let mut e = commands.entity(stone);
-            e.remove::<Sleeping>();
-            index = index.next(Player(start_player));
-
-            self.get_bucket_mut(index).push(stone);
-            let (mut transform, mut linear_velocity, mut angular_velocity) =
-                query.get_mut(stone).unwrap();
-            transform.translation = Self::bucket_position(index);
-            transform.rotation = Quat::from_rotation_x(90.0);
-            **linear_velocity = Vector::ZERO;
-            **angular_velocity = Vector::ZERO;
-        });
-
-        if !matches!(index, Index::Score(_)) {
-            turn.0 = (turn.0 + 1) % 2;
-        }
-
-        if self
-            .players
-            .iter()
-            .any(|side| side.buckets.iter().all(Vec::is_empty))
-        {
-            let winner = self
-                .players
-                .iter()
-                .enumerate()
-                .max_by_key(|(_, side)| side.home.len())
-                .unwrap()
-                .0;
-            commands.trigger(Winner(winner));
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Index {
-    Player(Player, Hole),
-    Score(Player),
-}
-
-impl Index {
-    fn next(self, Player(start): Player) -> Self {
-        match self {
-            Index::Player(Player(p), Hole(h)) => {
-                if h >= 5 {
-                    if p == start {
-                        Index::Score(Player(p))
-                    } else {
-                        Index::Player(Player((p + 1) % 2), Hole(0))
-                    }
-                } else {
-                    Index::Player(Player(p), Hole(h + 1))
-                }
-            }
-            Index::Score(Player(p)) => Index::Player(Player((p + 1) % 2), Hole(0)),
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash, Deref, DerefMut)]
 pub struct Player(pub usize);
 
-#[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash, Deref, DerefMut)]
 pub struct Hole(pub usize);
 
 #[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
@@ -232,7 +83,10 @@ pub struct Score;
 #[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash)]
 pub struct Turn;
 
-#[derive(Debug, Default, Clone, Copy, Resource)]
+#[derive(Debug, Resource, Reflect, Deref, DerefMut)]
+pub struct Board(Box<dyn Variant + 'static>);
+
+#[derive(Debug, Default, Clone, Copy, Resource, Deref, DerefMut)]
 pub struct Selected(Option<Index>);
 
 #[derive(Debug, Default, Clone, Copy, Resource)]
@@ -259,12 +113,11 @@ pub fn setup_state(mut commands: Commands) {
 }
 
 pub fn setup_board(mut board: ResMut<Board>, mut commands: Commands, game_assets: Res<GameAssets>) {
-    *board = Board::default();
+    *board = Board(ChosenVariant::default().to_variant());
 
     let collider = ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh);
 
     commands.spawn((
-        GameUi,
         RigidBody::Static,
         collider,
         CollisionMargin(0.005),
@@ -276,11 +129,11 @@ pub fn setup_board(mut board: ResMut<Board>, mut commands: Commands, game_assets
     ));
 
     for player in 0..PLAYER_COUNT {
-        for hole in 0..HOLE_COUNT {
+        for hole in 0..board.hole_count() {
             // Invisible material for hole
-            let mut bucket_position =
-                Board::bucket_position(Index::Player(Player(player), Hole(hole)))
-                    + Vec3::new(0.0, 5.0, 0.0);
+            let mut bucket_position = board
+                .bucket_position(Index::Player(Player(player), Hole(hole)))
+                + Vec3::new(0.0, 5.0, 0.0);
             bucket_position.y = 0.01;
             let color = match player {
                 0 => Color::linear_rgba(0.0, 0.0, 1.0, 1.0),
@@ -289,7 +142,6 @@ pub fn setup_board(mut board: ResMut<Board>, mut commands: Commands, game_assets
             commands
                 .spawn((
                     Name::from(format!("bucket_{player}_{hole}")),
-                    GameUi,
                     Player(player),
                     Hole(hole),
                     PointLight {
@@ -352,14 +204,16 @@ pub fn setup_board(mut board: ResMut<Board>, mut commands: Commands, game_assets
                             return;
                         }
 
-                        if selected.0.is_none() {
-                            return;
+                        {
+                            let Some(selected) = selected.0.as_mut() else {
+                                return;
+                            };
+                            if *selected != Index::Player(Player(player), Hole(hole)) {
+                                return;
+                            }
+                            commands.trigger(MoveEvent::HoleClicked(*selected));
                         }
-                        if selected.0.unwrap() != Index::Player(Player(player), Hole(hole)) {
-                            return;
-                        }
-                        commands.trigger(MoveEvent::HoleClicked(player, hole));
-                        selected.0 = None;
+                        **selected = None;
                     },
                 );
 
@@ -371,7 +225,6 @@ pub fn setup_board(mut board: ResMut<Board>, mut commands: Commands, game_assets
                 .with_scale(Vec3::splat(0.001));
             commands.spawn((
                 Name::from(format!("bucket_label_{player}_{hole}")),
-                GameUi,
                 Player(player),
                 Hole(hole),
                 BillboardText::new("4"),
@@ -395,7 +248,7 @@ fn is_invalid_selection(
     player != turn.0
         || *game_state != GameState::Playing
         || board
-            .get_bucket(Index::Player(Player(player), Hole(hole)))
+            .get_bucket_entities(Index::Player(Player(player), Hole(hole)))
             .is_empty()
 }
 
@@ -424,10 +277,9 @@ pub fn perform_move(
 ) {
     let event = *move_event;
     match event {
-        MoveEvent::HoleClicked(player, hole) => {
+        MoveEvent::HoleClicked(index) => {
             board.perform_move(
-                player,
-                hole,
+                index,
                 &mut transforms,
                 &mut turns,
                 &mut to_sleep,
@@ -470,7 +322,9 @@ pub fn update_labels(
              hole,
              mut text,
          }| {
-            let count = board.get_bucket(Index::Player(*player, *hole)).len();
+            let count = board
+                .get_bucket_entities(Index::Player(*player, *hole))
+                .len();
             text.0 = count.to_string();
         },
     );
@@ -478,7 +332,7 @@ pub fn update_labels(
     score
         .par_iter_mut()
         .for_each(|TextDataItem { player, mut text }| {
-            let count = board.get_bucket(Index::Score(*player)).len();
+            let count = board.get_bucket_entities(Index::Score(*player)).len();
             **text = count.to_string();
         });
 
@@ -509,21 +363,21 @@ pub fn setup_stones(
 
     tracing::info!("Spawning stones");
     for player in 0..PLAYER_COUNT {
-        for hole in 0..HOLE_COUNT {
-            for i in 0..STARTING_PIECES {
-                let position = Board::bucket_position(Index::Player(Player(player), Hole(hole)));
+        for hole in 0..board.hole_count() {
+            for i in 0..board.starting_pieces() {
+                let position = board.bucket_position(Index::Player(Player(player), Hole(hole)));
                 let perturb = Vec3::new(
                     (i as f32 * 0.001).sin() * 0.0025,
                     i as f32 * BALL_RADIUS,
                     (i as f32 * 0.001).cos() * 0.0025,
                 );
 
-                board.players[player].buckets[hole].push(
+                board.push_entity(
+                    Index::Player(Player(player), Hole(hole)),
                     commands
                         .spawn((
                             Name::from(format!("stone_{player}_{hole}_{i}")),
                             Stone,
-                            GameUi,
                             RigidBody::Dynamic,
                             collider.clone(),
                             CollisionMargin(0.0025),
@@ -561,7 +415,6 @@ pub fn setup_stones(
 fn setup_ui(mut commands: Commands, game_assets: Res<GameAssets>) {
     commands
         .spawn((
-            GameUi,
             Node {
                 display: Display::Flex,
                 width: Val::Percent(100.0),
@@ -675,7 +528,6 @@ fn spawn_win_text(winner: usize, commands: &mut Commands, game_assets: &Res<Game
     const COLORS: [Color; 2] = [Color::Srgba(LIGHT_CYAN), Color::Srgba(GREEN)];
     commands
         .spawn((
-            GameUi,
             WinnerButton,
             Button,
             FocusPolicy::Pass,
