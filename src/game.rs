@@ -23,6 +23,8 @@ use crate::{
     PLAYER_COUNT,
 };
 
+pub const BALL_RADIUS: f32 = 0.007;
+
 pub struct Plugin;
 
 #[derive(Resource, Debug, PartialEq, Eq, Clone, Deref)]
@@ -72,6 +74,12 @@ pub enum GameState {
 #[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash, Deref, DerefMut)]
 pub struct Player(pub usize);
 
+impl Player {
+    pub fn next(&self) -> Self {
+        Self((self.0 + 1) % 2)
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, Component, Reflect, PartialEq, Eq, Hash, Deref, DerefMut)]
 pub struct Hole(pub usize);
 
@@ -90,8 +98,14 @@ pub struct Board(Box<dyn Variant + 'static>);
 #[derive(Debug, Default, Clone, Copy, Resource, Deref, DerefMut)]
 pub struct Selected(Option<Index>);
 
-#[derive(Debug, Default, Clone, Copy, Resource)]
-pub struct PlayerTurn(pub usize);
+#[derive(Debug, Default, Clone, Copy, Resource, Deref, DerefMut)]
+pub struct PlayerTurn(usize);
+
+impl PlayerTurn {
+    pub fn inc(&mut self) {
+        self.0 = (self.0 + 1) % 2;
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, Event)]
 pub struct Winner(pub usize);
@@ -354,7 +368,6 @@ pub fn setup_stones(
     game_assets: Res<GameAssets>,
     meshes: Res<Assets<Mesh>>,
 ) {
-    const BALL_RADIUS: f32 = 0.007;
     const SCALE: f32 = 0.8;
 
     let mut materials = game_assets.stone_materials.iter().cycle().cloned();
@@ -567,7 +580,7 @@ fn spawn_win_text(winner: usize, commands: &mut Commands, game_assets: &Res<Game
 }
 
 fn update_to_sleep(
-    mut commands: Commands,
+    par_commands: ParallelCommands,
     delta_time: Res<Time>,
     to_sleep: Option<ResMut<ToSleep>>,
     mut timer: Query<Entity, With<Stone>>,
@@ -576,10 +589,12 @@ fn update_to_sleep(
         return;
     };
     to_sleep.0.tick(delta_time.delta());
-    timer.iter_mut().for_each(move |entity| {
+    timer.par_iter_mut().for_each(|entity| {
         if to_sleep.0.just_finished() {
-            let mut stone = commands.entity(entity);
-            stone.insert(Sleeping);
+            par_commands.command_scope(|mut commands| {
+                let mut stone = commands.entity(entity);
+                stone.insert(Sleeping);
+            });
         }
     });
 }

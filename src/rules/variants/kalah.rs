@@ -3,7 +3,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use super::{Index, Variant};
-use crate::game::{Hole, Player, PlayerTurn, ToSleep, Winner};
+use crate::game::{Hole, Player, PlayerTurn, ToSleep, Winner, BALL_RADIUS};
 use crate::PLAYER_COUNT;
 
 pub const HOLE_COUNT: usize = 6;
@@ -65,13 +65,12 @@ impl Variant for Kalah {
         &mut self,
         mut index: Index,
         query: &mut Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
-        turn: &mut ResMut<PlayerTurn>,
+        player_turn: &mut ResMut<PlayerTurn>,
         to_sleep: &mut Option<ResMut<ToSleep>>,
         commands: &mut Commands,
     ) {
         assert!(matches!(index, Index::Player(_, _)));
-        let entities =
-            std::mem::take(&mut self.players[index.player()].buckets[*index.hole().unwrap()]);
+        let entities = std::mem::take(self.get_bucket_entities_mut(index));
         let start_player = index.player();
         // Reset the stone Sleep timer if it exists.
         to_sleep.as_mut().map(|t| t.reset());
@@ -81,17 +80,31 @@ impl Variant for Kalah {
             e.remove::<Sleeping>();
             index = index.next(Player(start_player));
 
-            self.get_bucket_entities_mut(index).push(stone);
-            let (mut transform, mut linear_velocity, mut angular_velocity) =
-                query.get_mut(stone).unwrap();
-            transform.translation = self.bucket_position(index);
-            transform.rotation = Quat::from_rotation_x(90.0);
-            **linear_velocity = Vector::ZERO;
-            **angular_velocity = Vector::ZERO;
+            self.update_pieces_after_move(index, [stone], query, player_turn, to_sleep, commands);
         });
 
         if !matches!(index, Index::Score(_)) {
-            turn.0 = (turn.0 + 1) % 2;
+            if let Some(opposite) = index.opposite_bucket() {
+                // If the opposite bucket contains a stone, and the current bucket was empty, AND
+                // the bucket is on the current player's side; capture the stones in both buckets.
+                if index.player() == ***player_turn
+                    && self.get_bucket_entities(index).len() == 1
+                    && !self.get_bucket_entities(opposite).is_empty()
+                {
+                    let ours = std::mem::take(self.get_bucket_entities_mut(index));
+                    let theirs = std::mem::take(self.get_bucket_entities_mut(opposite));
+                    tracing::info!("Captured {} stones", ours.len() + theirs.len());
+                    self.update_pieces_after_move(
+                        Index::Score(Player(***player_turn)),
+                        ours.into_iter().chain(theirs),
+                        query,
+                        player_turn,
+                        to_sleep,
+                        commands,
+                    );
+                }
+            }
+            player_turn.inc();
         }
 
         if self
@@ -134,4 +147,26 @@ impl Kalah {
     ];
     const BUCKET_POSITIONS: [Vec3; PLAYER_COUNT] =
         [Vec3::new(0.276, 0.075, 0.0), Vec3::new(-0.276, 0.075, 0.0)];
+
+    fn update_pieces_after_move(
+        &mut self,
+        index: Index,
+        entities: impl IntoIterator<Item = Entity>,
+        query: &mut Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
+        player_turn: &mut ResMut<PlayerTurn>,
+        to_sleep: &mut Option<ResMut<ToSleep>>,
+        commands: &mut Commands,
+    ) {
+        let mut perturb = Vec3::ZERO;
+        entities.into_iter().for_each(|stone| {
+            self.get_bucket_entities_mut(index).push(stone);
+            let (mut transform, mut linear_velocity, mut angular_velocity) =
+                query.get_mut(stone).unwrap();
+            transform.translation = self.bucket_position(index) + perturb;
+            transform.rotation = Quat::from_rotation_x(90.0);
+            **linear_velocity = Vector::ZERO;
+            **angular_velocity = Vector::ZERO;
+            perturb.y += BALL_RADIUS;
+        });
+    }
 }

@@ -5,6 +5,8 @@ use bevy::prelude::*;
 
 use crate::game::{Hole, Player, PlayerTurn, ToSleep};
 
+use self::kalah::HOLE_COUNT;
+
 pub mod kalah;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -28,6 +30,16 @@ impl Index {
                 }
             }
             Index::Score(Player(p)) => Index::Player(Player((p + 1) % 2), Hole(0)),
+        }
+    }
+
+    fn opposite_bucket(&self) -> Option<Self> {
+        match self {
+            Index::Player(player, Hole(h)) => {
+                // The hole that is opposite the current hole has a different index than ours.
+                Some(Index::Player(player.next(), Hole(HOLE_COUNT - h - 1)))
+            }
+            Index::Score(_) => None,
         }
     }
 
