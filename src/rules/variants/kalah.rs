@@ -73,9 +73,9 @@ impl Variant for Kalah {
         let entities =
             std::mem::take(&mut self.players[index.player()].buckets[*index.hole().unwrap()]);
         let start_player = index.player();
-        if let Some(t) = to_sleep.as_mut() {
-            t.reset();
-        }
+        // Reset the stone Sleep timer if it exists.
+        to_sleep.as_mut().map(|t| t.reset());
+
         entities.into_iter().for_each(|stone| {
             let mut e = commands.entity(stone);
             e.remove::<Sleeping>();

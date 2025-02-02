@@ -20,7 +20,7 @@ pub(crate) fn setup_graphics(mut commands: Commands, cameras: Query<Entity, With
     commands.spawn((
         Name::new("Directional Light"),
         DirectionalLight {
-            illuminance: 500.0,
+            illuminance: 1000.0,
             shadows_enabled: true,
             ..default()
         },

@@ -31,7 +31,7 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.enable_state_scoped_entities::<GameState>()
+        app
             .add_plugins((
                 FrameTimeDiagnosticsPlugin,
                 ProgressPlugin::<GameState>::new()

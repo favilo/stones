@@ -35,6 +35,7 @@ impl app::Plugin for Plugin {
             .register_type::<Player>()
             .register_type::<Hole>()
             .init_state::<GameState>()
+            .enable_state_scoped_entities::<GameState>()
             .add_event::<Winner>()
             .add_loading_state(
                 LoadingState::new(GameState::Loading)
@@ -99,7 +100,7 @@ pub struct Winner(pub usize);
 pub struct WinnerText;
 
 #[derive(Debug, Clone, Resource, Reflect, PartialEq, Eq, Deref, DerefMut)]
-pub struct ToSleep(pub Timer);
+pub struct ToSleep(Timer);
 
 impl Default for ToSleep {
     fn default() -> Self {
@@ -170,7 +171,7 @@ pub fn setup_board(mut board: ResMut<Board>, mut commands: Commands, game_assets
                             light.intensity = 0.0;
                             return;
                         }
-                        light.intensity = 1000.0;
+                        light.intensity = 500.0;
                     },
                 )
                 .observe(
