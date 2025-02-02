@@ -66,6 +66,7 @@ bevy_asset_loader = { version = "0.22.0", features = [
 ] }
 bevy = { version = "0.15.1", default-features = true }
 bevy_mod_billboard = { git = "https://github.com/voximity/bevy_mod_billboard", branch = "migrate-0.15" }
+bevy_prefs_lite = { git = "https://github.com/favilo/bevy_prefs_lite.git", branch = "android" }
 # bevy_mod_picking = { version = "0.20.1", features = [] }
 # bevy_obj = "0.15"
 # blenvy = { git = "https://github.com/ptsd/Blenvy.git", branch = "blenvy-bevy-0.15" }

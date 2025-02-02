@@ -8,6 +8,7 @@ use bevy::{
 };
 
 use bevy_mod_billboard::plugin::BillboardPlugin;
+use bevy_prefs_lite::{AutosavePrefsPlugin, Preferences};
 use game::GameState;
 use iyes_progress::ProgressPlugin;
 use tracing::Level;
@@ -31,6 +32,7 @@ impl Plugin for GamePlugin {
                     .with_state_transition(GameState::Loading, GameState::Menu),
                 // ObjPlugin,
                 BillboardPlugin,
+                AutosavePrefsPlugin,
             ));
         #[cfg(not(target_os = "android"))]
         {
@@ -39,8 +41,15 @@ impl Plugin for GamePlugin {
                 let (config, _) = config_store.config::<PhysicsGizmos>();
                 config.enabled
             }))
+            .insert_resource(Preferences::new("org.favil.stones"))
             // .add_plugins(BlenvyPlugin::default())
             ;
+        }
+        #[cfg(target_os = "android")]
+        {
+            app.insert_resource(Preferences::new_from_android_app(
+                &bevy::window::ANDROID_APP.get().unwrap(),
+            ));
         }
         app.add_plugins((
             PhysicsPlugins::default().with_length_unit(0.01),
