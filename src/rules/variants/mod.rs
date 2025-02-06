@@ -2,8 +2,9 @@ use std::fmt::Debug;
 
 use avian3d::prelude::{AngularVelocity, LinearVelocity};
 use bevy::prelude::*;
+use bevy_sequential_actions::{Action, BoxedAction};
 
-use crate::game::{Hole, Player, PlayerTurn, ToSleep};
+use crate::game::{Hole, Player, PlayerTurn};
 
 use self::kalah::HOLE_COUNT;
 
@@ -23,13 +24,13 @@ impl Index {
                     if p == start {
                         Index::Score(Player(p))
                     } else {
-                        Index::Player(Player((p + 1) % 2), Hole(0))
+                        Index::Player(Player::next(p), Hole(0))
                     }
                 } else {
                     Index::Player(Player(p), Hole(h + 1))
                 }
             }
-            Index::Score(Player(p)) => Index::Player(Player((p + 1) % 2), Hole(0)),
+            Index::Score(Player(p)) => Index::Player(Player::next(p), Hole(0)),
         }
     }
 
@@ -37,7 +38,10 @@ impl Index {
         match self {
             Index::Player(player, Hole(h)) => {
                 // The hole that is opposite the current hole has a different index than ours.
-                Some(Index::Player(player.next(), Hole(HOLE_COUNT - h - 1)))
+                Some(Index::Player(
+                    Player::next(*player),
+                    Hole(HOLE_COUNT - h - 1),
+                ))
             }
             Index::Score(_) => None,
         }
@@ -69,14 +73,7 @@ pub trait Variant: Send + Sync + Debug + Reflect {
 
     fn push_entity(&mut self, index: Index, entity: Entity);
 
-    fn perform_move(
-        &mut self,
-        index: Index,
-        query: &mut Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
-        turn: &mut ResMut<PlayerTurn>,
-        to_sleep: &mut Option<ResMut<ToSleep>>,
-        commands: &mut Commands,
-    );
+    fn perform_move(&mut self, index: Index, turn: Player) -> Vec<BoxedAction>;
 }
 
 #[derive(Debug, Resource)]

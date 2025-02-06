@@ -430,6 +430,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy-sequential-actions"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c89f3576c396bfa8634872724cf2f93cb354c43fec3baf7f50b98e381f7a5ec"
+dependencies = [
+ "bevy_app",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_log",
+ "bevy_utils",
+ "downcast-rs",
+]
+
+[[package]]
 name = "bevy_a11y"
 version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4636,6 +4650,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "bevy-inspector-egui",
+ "bevy-sequential-actions",
  "bevy_asset_loader",
  "bevy_mod_billboard",
  "bevy_prefs_lite",

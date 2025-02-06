@@ -10,6 +10,7 @@ use bevy::{
 
 use bevy_mod_billboard::plugin::BillboardPlugin;
 use bevy_prefs_lite::{AutosavePrefsPlugin, Preferences};
+use bevy_sequential_actions::SequentialActionsPlugin;
 use game::GameState;
 use iyes_progress::ProgressPlugin;
 use tracing::Level;
@@ -36,7 +37,7 @@ impl Plugin for GamePlugin {
                 FrameTimeDiagnosticsPlugin,
                 ProgressPlugin::<GameState>::new()
                     .with_state_transition(GameState::Loading, GameState::Menu),
-                // ObjPlugin,
+                SequentialActionsPlugin,
                 BillboardPlugin,
                 AutosavePrefsPlugin,
             ));
