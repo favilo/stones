@@ -1,6 +1,8 @@
 /target
-/mobile/android/app/build
-/mobile/android/app/.cxx
+/mobile/android/stones/build
+/mobile/android/stones/.cxx
 **/.gradle/
 /dist
 **/*.so
+/build/**.aab
+/build/**.apk

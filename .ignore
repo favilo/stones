@@ -1,2 +1,3 @@
 # Ignore art files when using ripgrep
 art/
+Cargo.lock

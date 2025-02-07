@@ -15,9 +15,7 @@ build-play: clean-libs
         -o mobile/android/app/src/main/jniLibs \
         build --release -p mobile
     cd mobile/android && ./gradlew bundleRelease
-    # apksigner sign --ks ~/.android/release.keystore --ks-key-alias android_release_key --ks-pass stdin target/play/release/app-release.aab
-    # RUST_LOG=debug x build --store play --release -p mobile
-    # jarsigner target/x/release/android/mobile.aab android_release_key -keystore ~/.android/release.keystore
+    cp mobile/android/stones/build/outputs/bundle/release/*.aab ./build/bundle/
 
 build-android: clean-libs
     @echo "Building for android..."
@@ -27,8 +25,8 @@ build-android: clean-libs
         --platform=34 \
         -o mobile/android/app/src/main/jniLibs \
         build --release -p mobile
-    cd mobile/android && ./gradlew assembleRelease
-    # apksigner sign --ks ~/.android/release.keystore --ks-key-alias android_release_key --ks-pass stdin mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+    cd mobile/android && ./gradlew assembleRelease --warning-mode all
+    cp mobile/android/stones/build/outputs/apk/release/*.apk ./build/apk/
 
 build-android-emulator: clean-libs
     @echo "Building for android emulator..."
@@ -37,8 +35,8 @@ build-android-emulator: clean-libs
         --platform=34 \
         -o mobile/android/app/src/main/jniLibs \
         build --release -p mobile
-    cd mobile/android && ./gradlew assembleRelease
-    # apksigner sign --ks ~/.android/release.keystore --ks-key-alias android_release_key --ks-pass stdin mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+    cd mobile/android && ./gradlew assembleRelease --warning-mode all
+    cp mobile/android/stones/build/outputs/apk/release/*.apk ./build/apk/
 
 run: run-release
 

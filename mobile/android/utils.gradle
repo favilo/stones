@@ -1,0 +1,4 @@
+ext.getArtifactName = {
+    defaultConfig ->
+        return project.name + "-" + defaultConfig.versionName + "-" + defaultConfig.versionCode
+}
