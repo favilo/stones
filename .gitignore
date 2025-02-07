@@ -4,5 +4,5 @@
 **/.gradle/
 /dist
 **/*.so
-/build/**.aab
-/build/**.apk
+/build/**/*.aab
+/build/**/*.apk
