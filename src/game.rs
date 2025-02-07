@@ -1,26 +1,20 @@
 use std::hash::Hash;
 
-use avian3d::prelude::*;
 use bevy::{
     app,
-    color::palettes::css::{DARK_CYAN, GOLD, GREEN, LIGHT_CYAN, SLATE_GRAY},
-    ecs::{query::QueryData, system::SystemId},
+    color::palettes::css::{DARK_CYAN, GOLD, GREEN, SLATE_GRAY},
     prelude::*,
-    ui::FocusPolicy,
 };
 use bevy_asset_loader::{
     loading_state::{config::ConfigureLoadingState, LoadingState, LoadingStateAppExt},
     standard_dynamic_asset::StandardDynamicAssetCollection,
 };
-use bevy_mod_billboard::BillboardText;
 use bevy_sequential_actions::{ActionsProxy, ModifyActions, SequentialActions};
 
 use crate::{
     assets::GameAssets,
-    physics::GameLayer,
     rules::variants::{ChosenVariant, Index, Variant},
     ui::{hover_button, unhover_button},
-    PLAYER_COUNT,
 };
 
 use self::actions::{board::SpawnBoardAndPieces, turn::NextPlayer};

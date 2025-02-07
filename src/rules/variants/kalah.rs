@@ -1,13 +1,10 @@
-use avian3d::math::Vector;
-use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy::text::cosmic_text::Action;
 use bevy_sequential_actions::BoxedAction;
 
 use super::{Index, Variant};
 use crate::game::actions::turn::{MovePiece, NextPlayer};
 use crate::game::actions::ui::DeclareWinner;
-use crate::game::{Hole, Player, PlayerTurn, BALL_RADIUS};
+use crate::game::{Hole, Player};
 use crate::PLAYER_COUNT;
 
 pub const HOLE_COUNT: usize = 6;
@@ -75,7 +72,7 @@ impl Variant for Kalah {
             index = index.next(Player(start_player));
 
             self.get_bucket_entities_mut(index).push(stone);
-            actions.push(Box::new(MovePiece::new(stone, self.bucket_position(index))));
+            actions.push(Box::new(MovePiece::new_action(stone, self.bucket_position(index))));
         });
 
         if !matches!(index, Index::Score(_)) {
@@ -92,11 +89,11 @@ impl Variant for Kalah {
                     let score_index = Index::Score(Player(start_player));
                     actions.extend(ours.iter().copied().chain(theirs.iter().copied()).map(
                         |stone| -> BoxedAction {
-                            Box::new(MovePiece::new(stone, self.bucket_position(score_index)))
+                            Box::new(MovePiece::new_action(stone, self.bucket_position(score_index)))
                         },
                     ));
                     self.get_bucket_entities_mut(score_index)
-                        .extend(ours.into_iter().chain(theirs.into_iter()));
+                        .extend(ours.into_iter().chain(theirs));
                 }
             }
             player = Player::next(player);

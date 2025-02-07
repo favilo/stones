@@ -3,7 +3,7 @@ use std::time::Duration;
 use avian3d::prelude::{AngularVelocity, LinearVelocity, Sleeping};
 use bevy::{app, ecs::system::SystemId, prelude::*};
 use bevy_sequential_actions::{
-    actions, Action, ActionsProxy, AddOrder, ModifyActions, SequentialActions, StopReason,
+    actions, Action, ActionsProxy, ModifyActions, SequentialActions, StopReason,
 };
 
 use crate::{
@@ -40,7 +40,6 @@ impl SystemInResource for PlayerMoveResource {
 pub fn perform_move(
     index: In<Index>,
     mut board: ResMut<Board>,
-    mut transforms: Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
     mut p_turn: ResMut<PlayerTurn>,
     mut lights: Query<&mut PointLight>,
     agent: Single<Entity, With<SequentialActions>>,
@@ -69,10 +68,7 @@ pub struct WaitTimer {
     pub timer: Timer,
 }
 
-fn update_wait_timer(
-    mut timers: Query<(&mut WaitTimer), With<SequentialActions>>,
-    time: Res<Time>,
-) {
+fn update_wait_timer(mut timers: Query<&mut WaitTimer, With<SequentialActions>>, time: Res<Time>) {
     timers.iter_mut().for_each(|mut timer| {
         timer.tick(time.delta());
     });
@@ -132,17 +128,17 @@ pub struct MovePiece {
 }
 
 impl MovePiece {
-    pub fn new(stone: Entity, destination: Vec3) -> ChainActions<2> {
+    pub fn new_action(stone: Entity, destination: Vec3) -> ChainActions<2> {
         ChainActions::new(actions![Self { stone, destination }, Wait::from_secs(0.1)])
     }
 }
 
 impl Action for MovePiece {
-    fn is_finished(&self, agent: Entity, world: &World) -> bool {
+    fn is_finished(&self, _agent: Entity, _world: &World) -> bool {
         true
     }
 
-    fn on_start(&mut self, agent: Entity, world: &mut World) -> bool {
+    fn on_start(&mut self, _agent: Entity, world: &mut World) -> bool {
         let mut query =
             QueryState::<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>::new(world);
         let (mut transform, mut linear_velocity, mut angular_veocity) =
@@ -155,13 +151,13 @@ impl Action for MovePiece {
         true
     }
 
-    fn on_stop(&mut self, agent: Option<Entity>, world: &mut World, reason: StopReason) {}
+    fn on_stop(&mut self, _agent: Option<Entity>, _world: &mut World, _reason: StopReason) {}
 }
 
 pub struct NextPlayer(pub Player);
 
 impl Action for NextPlayer {
-    fn is_finished(&self, agent: Entity, world: &World) -> bool {
+    fn is_finished(&self, _agent: Entity, _world: &World) -> bool {
         true
     }
 
@@ -178,17 +174,17 @@ impl Action for NextPlayer {
         true
     }
 
-    fn on_stop(&mut self, agent: Option<Entity>, world: &mut World, reason: StopReason) {}
+    fn on_stop(&mut self, _agent: Option<Entity>, _world: &mut World, _reason: StopReason) {}
 }
 
 pub struct SleepPieces;
 
 impl Action for SleepPieces {
-    fn is_finished(&self, agent: Entity, world: &World) -> bool {
+    fn is_finished(&self, _agent: Entity, _world: &World) -> bool {
         true
     }
 
-    fn on_start(&mut self, agent: Entity, world: &mut World) -> bool {
+    fn on_start(&mut self, _agent: Entity, world: &mut World) -> bool {
         let stones = world
             .query_filtered::<Entity, With<Stone>>()
             .iter(world)
@@ -201,5 +197,5 @@ impl Action for SleepPieces {
         true
     }
 
-    fn on_stop(&mut self, agent: Option<Entity>, world: &mut World, reason: StopReason) {}
+    fn on_stop(&mut self, _agent: Option<Entity>, _world: &mut World, _reason: StopReason) {}
 }

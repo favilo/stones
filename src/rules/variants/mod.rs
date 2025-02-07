@@ -1,10 +1,9 @@
 use std::fmt::Debug;
 
-use avian3d::prelude::{AngularVelocity, LinearVelocity};
 use bevy::prelude::*;
-use bevy_sequential_actions::{Action, BoxedAction};
+use bevy_sequential_actions::BoxedAction;
 
-use crate::game::{Hole, Player, PlayerTurn};
+use crate::game::{Hole, Player};
 
 use self::kalah::HOLE_COUNT;
 
@@ -49,8 +48,7 @@ impl Index {
 
     fn player(&self) -> usize {
         match self {
-            Index::Player(Player(p), _) => *p,
-            Index::Score(Player(p)) => *p,
+            Index::Player(Player(p), _) | Index::Score(Player(p)) => *p,
         }
     }
 

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use bevy::ecs::system::SystemId;
 use bevy::{app, prelude::*};
 use bevy_sequential_actions::{
-    Action, ActionsProxy, AddOrder, BoxedAction, DropReason, IntoBoxedAction, IntoBoxedActions,
+    Action, ActionsProxy, AddOrder, BoxedAction, DropReason,
     ModifyActions, SequentialActions, StopReason,
 };
 
@@ -32,7 +32,7 @@ pub trait SystemInResource: Resource {
 
 /// A generic `Action` that will run a system with the given input.
 ///
-/// This is useful for Actions that are basically just one_shot systems.
+/// This is useful for Actions that are basically just `one_shot` systems.
 #[derive(Clone, Copy, Debug)]
 pub struct RunSystem<R, I = (), P = ()>
 where
@@ -151,7 +151,7 @@ impl<const N: usize> Action for ChainActions<N> {
 
     fn on_stop(&mut self, agent: Option<Entity>, world: &mut World, reason: StopReason) {
         self.actions[self.index].on_stop(agent, world, reason);
-        self.canceled = reason == StopReason::Canceled
+        self.canceled = reason == StopReason::Canceled;
     }
 
     fn on_remove(&mut self, agent: Option<Entity>, world: &mut World) {

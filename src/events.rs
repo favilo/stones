@@ -1,6 +1,5 @@
 use bevy::{app, prelude::*};
 
-use crate::rules::variants::Index;
 
 pub struct Plugin;
 
