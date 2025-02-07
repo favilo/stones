@@ -10,6 +10,7 @@ use bevy::{
 
 use bevy_mod_billboard::plugin::BillboardPlugin;
 use bevy_prefs_lite::{AutosavePrefsPlugin, Preferences};
+use bevy_sequential_actions::SequentialActionsPlugin;
 use game::GameState;
 use iyes_progress::ProgressPlugin;
 use tracing::Level;
@@ -31,15 +32,14 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_plugins((
-                FrameTimeDiagnosticsPlugin,
-                ProgressPlugin::<GameState>::new()
-                    .with_state_transition(GameState::Loading, GameState::Menu),
-                // ObjPlugin,
-                BillboardPlugin,
-                AutosavePrefsPlugin,
-            ));
+        app.add_plugins((
+            FrameTimeDiagnosticsPlugin,
+            ProgressPlugin::<GameState>::new()
+                .with_state_transition(GameState::Loading, GameState::Menu),
+            SequentialActionsPlugin,
+            BillboardPlugin,
+            AutosavePrefsPlugin,
+        ));
         #[cfg(not(target_os = "android"))]
         {
             app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new()
@@ -88,13 +88,6 @@ impl Plugin for GamePlugin {
             game::Plugin,
             ui::Plugin,
         ))
-        // .add_systems(OnEnter(GameState::Loading), setup_colliders)
-        // .add_systems(
-        //     Update,
-        //     show_progress
-        //         .run_if(in_state(GameState::Loading))
-        //         .after(LoadingStateSet(GameState::Loading)),
-        // )
         .add_systems(FixedUpdate, toggle_debug);
     }
 }

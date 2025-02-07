@@ -1,9 +1,10 @@
-use avian3d::math::Vector;
-use avian3d::prelude::*;
 use bevy::prelude::*;
+use bevy_sequential_actions::BoxedAction;
 
 use super::{Index, Variant};
-use crate::game::{Hole, Player, PlayerTurn, ToSleep, Winner, BALL_RADIUS};
+use crate::game::actions::turn::{MovePiece, NextPlayer};
+use crate::game::actions::ui::DeclareWinner;
+use crate::game::{Hole, Player};
 use crate::PLAYER_COUNT;
 
 pub const HOLE_COUNT: usize = 6;
@@ -61,50 +62,41 @@ impl Variant for Kalah {
         self.players[index.player()].buckets[*index.hole().expect("Invalid index")].push(entity);
     }
 
-    fn perform_move(
-        &mut self,
-        mut index: Index,
-        query: &mut Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
-        player_turn: &mut ResMut<PlayerTurn>,
-        to_sleep: &mut Option<ResMut<ToSleep>>,
-        commands: &mut Commands,
-    ) {
+    fn perform_move(&mut self, mut index: Index, mut player: Player) -> Vec<BoxedAction> {
         assert!(matches!(index, Index::Player(_, _)));
         let entities = std::mem::take(self.get_bucket_entities_mut(index));
         let start_player = index.player();
-        // Reset the stone Sleep timer if it exists.
-        to_sleep.as_mut().map(|t| t.reset());
+        let mut actions = Vec::<BoxedAction>::new();
 
         entities.into_iter().for_each(|stone| {
-            let mut e = commands.entity(stone);
-            e.remove::<Sleeping>();
             index = index.next(Player(start_player));
 
-            self.update_pieces_after_move(index, [stone], query, player_turn, to_sleep, commands);
+            self.get_bucket_entities_mut(index).push(stone);
+            actions.push(Box::new(MovePiece::new_action(stone, self.bucket_position(index))));
         });
 
         if !matches!(index, Index::Score(_)) {
             if let Some(opposite) = index.opposite_bucket() {
                 // If the opposite bucket contains a stone, and the current bucket was empty, AND
                 // the bucket is on the current player's side; capture the stones in both buckets.
-                if index.player() == ***player_turn
+                if index.player() == start_player
                     && self.get_bucket_entities(index).len() == 1
                     && !self.get_bucket_entities(opposite).is_empty()
                 {
                     let ours = std::mem::take(self.get_bucket_entities_mut(index));
                     let theirs = std::mem::take(self.get_bucket_entities_mut(opposite));
                     tracing::info!("Captured {} stones", ours.len() + theirs.len());
-                    self.update_pieces_after_move(
-                        Index::Score(Player(***player_turn)),
-                        ours.into_iter().chain(theirs),
-                        query,
-                        player_turn,
-                        to_sleep,
-                        commands,
-                    );
+                    let score_index = Index::Score(Player(start_player));
+                    actions.extend(ours.iter().copied().chain(theirs.iter().copied()).map(
+                        |stone| -> BoxedAction {
+                            Box::new(MovePiece::new_action(stone, self.bucket_position(score_index)))
+                        },
+                    ));
+                    self.get_bucket_entities_mut(score_index)
+                        .extend(ours.into_iter().chain(theirs));
                 }
             }
-            player_turn.inc();
+            player = Player::next(player);
         }
 
         if self
@@ -119,8 +111,12 @@ impl Variant for Kalah {
                 .max_by_key(|(_, side)| side.home.len())
                 .unwrap()
                 .0;
-            commands.trigger(Winner(winner));
+            actions.push(Box::new(DeclareWinner::with_input(Player(winner))));
+        } else {
+            actions.push(Box::new(NextPlayer(player)));
         }
+
+        actions
     }
 }
 
@@ -147,26 +143,4 @@ impl Kalah {
     ];
     const BUCKET_POSITIONS: [Vec3; PLAYER_COUNT] =
         [Vec3::new(0.276, 0.075, 0.0), Vec3::new(-0.276, 0.075, 0.0)];
-
-    fn update_pieces_after_move(
-        &mut self,
-        index: Index,
-        entities: impl IntoIterator<Item = Entity>,
-        query: &mut Query<(&mut Transform, &mut LinearVelocity, &mut AngularVelocity)>,
-        player_turn: &mut ResMut<PlayerTurn>,
-        to_sleep: &mut Option<ResMut<ToSleep>>,
-        commands: &mut Commands,
-    ) {
-        let mut perturb = Vec3::ZERO;
-        entities.into_iter().for_each(|stone| {
-            self.get_bucket_entities_mut(index).push(stone);
-            let (mut transform, mut linear_velocity, mut angular_velocity) =
-                query.get_mut(stone).unwrap();
-            transform.translation = self.bucket_position(index) + perturb;
-            transform.rotation = Quat::from_rotation_x(90.0);
-            **linear_velocity = Vector::ZERO;
-            **angular_velocity = Vector::ZERO;
-            perturb.y += BALL_RADIUS;
-        });
-    }
 }
