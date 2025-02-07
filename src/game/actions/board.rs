@@ -13,7 +13,6 @@ use bevy_sequential_actions::{Action, ActionsProxy, ModifyActions, SequentialAct
 
 use crate::{
     assets::GameAssets,
-    events::MoveEvent,
     game::{
         is_invalid_selection, Board, GameState, Hole, Player, PlayerTurn, Selected, Stone,
         BALL_RADIUS,

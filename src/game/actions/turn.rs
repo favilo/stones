@@ -7,7 +7,6 @@ use bevy_sequential_actions::{
 };
 
 use crate::{
-    events::MoveEvent,
     game::{Board, Player, PlayerTurn, Stone},
     rules::variants::Index,
 };
@@ -37,6 +36,7 @@ impl SystemInResource for PlayerMoveResource {
     }
 }
 
+/// The system that will perform the move that the player selected.
 pub fn perform_move(
     index: In<Index>,
     mut board: ResMut<Board>,
@@ -57,9 +57,11 @@ pub fn perform_move(
     lights.par_iter_mut().for_each(|mut light| {
         light.intensity = 0.0;
     });
-    // TODO: Update labels in MovePiece.
-    tracing::info!("Performing move: {actions:?}");
-    commands.actions(*agent).start(false).add(actions);
+    commands
+        .actions(*agent)
+        .start(false)
+        .add(UpdateLabels::new())
+        .add(actions);
 }
 
 #[derive(Debug, Clone, Component, Deref, DerefMut)]
@@ -154,36 +156,6 @@ impl Action for MovePiece {
     }
 
     fn on_stop(&mut self, agent: Option<Entity>, world: &mut World, reason: StopReason) {}
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Winner(pub usize);
-
-// pub fn winner_found(
-//     trigger: Trigger<Winner>,
-//     mut lights: Query<&mut PointLight>,
-//     mut commands: Commands,
-//     game_assets: Res<GameAssets>,
-// ) {
-//     let Winner(winner) = *trigger;
-//     for mut light in lights.iter_mut() {
-//         light.intensity = 0.0;
-//     }
-//     spawn_win_text(winner, &mut commands, &game_assets);
-// }
-
-impl Action for Winner {
-    fn is_finished(&self, agent: Entity, world: &World) -> bool {
-        todo!()
-    }
-
-    fn on_start(&mut self, agent: Entity, world: &mut World) -> bool {
-        todo!()
-    }
-
-    fn on_stop(&mut self, agent: Option<Entity>, world: &mut World, reason: StopReason) {
-        todo!()
-    }
 }
 
 pub struct NextPlayer(pub Player);

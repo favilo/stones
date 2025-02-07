@@ -17,7 +17,6 @@ use bevy_sequential_actions::{ActionsProxy, ModifyActions, SequentialActions};
 
 use crate::{
     assets::GameAssets,
-    events::MoveEvent,
     physics::GameLayer,
     rules::variants::{ChosenVariant, Index, Variant},
     ui::{hover_button, unhover_button},
@@ -43,7 +42,6 @@ impl app::Plugin for Plugin {
             .register_type::<Hole>()
             .init_state::<GameState>()
             .enable_state_scoped_entities::<GameState>()
-            // .add_event::<Winner>()
             .add_loading_state(
                 LoadingState::new(GameState::Loading)
                     .continue_to_state(GameState::Menu)
@@ -52,9 +50,7 @@ impl app::Plugin for Plugin {
                     )
                     .load_collection::<GameAssets>(),
             )
-            .add_systems(OnEnter(GameState::Playing), (setup_state, setup_ui))
-        // .add_observer(winner_found);
-        ;
+            .add_systems(OnEnter(GameState::Playing), (setup_state, setup_ui));
     }
 }
 
@@ -138,7 +134,6 @@ fn is_invalid_selection(
             .get_bucket_entities(Index::Player(Player(player), Hole(hole)))
             .is_empty()
 }
-
 
 fn setup_ui(mut commands: Commands, game_assets: Res<GameAssets>) {
     commands

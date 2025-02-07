@@ -24,12 +24,15 @@ fn spawn_agent(mut commands: Commands) {
     commands.spawn(SequentialActions);
 }
 
-trait SystemInResource: Resource {
+pub trait SystemInResource: Resource {
     type Input: SystemInput;
 
     fn system_id(&self) -> SystemId<Self::Input>;
 }
 
+/// A generic `Action` that will run a system with the given input.
+///
+/// This is useful for Actions that are basically just one_shot systems.
 #[derive(Clone, Copy, Debug)]
 pub struct RunSystem<R, I = (), P = ()>
 where
@@ -54,8 +57,7 @@ where
 impl<R, I> Default for RunSystem<R, I, In<I>>
 where
     R: Resource,
-    I: SystemInput + Send + Sync + Default + 'static,
-    for<'a> I::Inner<'a>: Clone,
+    I: Clone + Send + Sync + Default + 'static,
 {
     fn default() -> Self {
         Self {
@@ -67,7 +69,7 @@ where
 
 impl<R> RunSystem<R>
 where
-    R: Resource,
+    R: SystemInResource<Input = ()>,
 {
     pub fn new() -> Self {
         Self::default()
@@ -76,7 +78,7 @@ where
 
 impl<R, I> RunSystem<R, I, In<I>>
 where
-    R: Resource,
+    R: SystemInResource<Input = In<I>>,
     I: Clone + Send + Sync + 'static,
     In<I>: SystemInput + Send + Sync + 'static,
 {
@@ -112,6 +114,9 @@ where
     fn on_stop(&mut self, _agent: Option<Entity>, _world: &mut World, _reason: StopReason) {}
 }
 
+/// An `Action` that will run the given array of systems in sequence.
+///
+/// Specifically useful for Adding a `Wait` action directly after the `MovePiece` action for instance.
 #[derive(Debug)]
 pub struct ChainActions<const N: usize> {
     actions: [BoxedAction; N],
@@ -175,8 +180,4 @@ impl<const N: usize> Action for ChainActions<N> {
             .order(AddOrder::Front)
             .add(self as BoxedAction);
     }
-
-    // fn type_name(&self) -> &'static str {
-    //     format!("[{}]", self.actions.iter().map(|a| a.type_name()).collect::<Vec<_>>().join(", ")).as_str()
-    // }
 }

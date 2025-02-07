@@ -5,7 +5,7 @@ use bevy::text::cosmic_text::Action;
 use bevy_sequential_actions::BoxedAction;
 
 use super::{Index, Variant};
-use crate::game::actions::turn::{MovePiece, NextPlayer, Winner};
+use crate::game::actions::turn::{MovePiece, NextPlayer};
 use crate::game::actions::ui::DeclareWinner;
 use crate::game::{Hole, Player, PlayerTurn, BALL_RADIUS};
 use crate::PLAYER_COUNT;
