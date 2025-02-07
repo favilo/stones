@@ -3,6 +3,7 @@ use bevy::ecs::query::QueryData;
 use bevy::ui::FocusPolicy;
 use bevy::{app, ecs::system::SystemId, prelude::*};
 use bevy_mod_billboard::BillboardText;
+use bevy_sequential_actions::{ActionsProxy, ModifyActions, SequentialActions};
 
 use crate::assets::GameAssets;
 use crate::game::{
@@ -10,6 +11,7 @@ use crate::game::{
 };
 use crate::rules::variants::Index;
 
+use super::turn::SleepPieces;
 use super::{RunSystem, SystemInResource};
 
 pub struct Plugin;
@@ -106,6 +108,7 @@ pub type DeclareWinner = RunSystem<WinnerFound, Player, In<Player>>;
 pub fn winner_found(
     In(winner): In<Player>,
     mut lights: Query<&mut PointLight>,
+    agent: Single<Entity, With<SequentialActions>>,
     mut commands: Commands,
     game_assets: Res<GameAssets>,
 ) {
@@ -113,6 +116,7 @@ pub fn winner_found(
     for mut light in lights.iter_mut() {
         light.intensity = 0.0;
     }
+    commands.actions(agent).start(false).add(SleepPieces);
     spawn_win_text(winner, &mut commands, &game_assets);
 }
 
