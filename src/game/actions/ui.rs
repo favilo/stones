@@ -116,7 +116,7 @@ pub fn winner_found(
     for mut light in lights.iter_mut() {
         light.intensity = 0.0;
     }
-    commands.actions(agent).start(false).add(SleepPieces);
+    commands.actions(*agent).start(false).add(SleepPieces);
     spawn_win_text(winner, &mut commands, &game_assets);
 }
 
